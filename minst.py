@@ -6,7 +6,7 @@ from opacus import PrivacyEngine
 from tqdm import tqdm
 # Check if CUDA is available
 if torch.cuda.is_available():
-    print("CUDA is available. Training on GPU.")
+    print("Version: 1.4.1. Training on GPU.")
 else:
     print("CUDA is not available. Training on CPU.")
 # Set the device
