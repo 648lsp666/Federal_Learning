@@ -7,9 +7,14 @@ conf={
 
 
     # # 模型信息：即当前任务使用的模型结构，此处为ResNet-18图像分类模型
-    "model_name" : "CNNMnist",	
+    "model_name" : "resnet18",	
+
+    #初始模型的文件路径：
+    "init_model":'E:\\fedcode\Federal_Learning\\fed_lth\models\init_resnet18.pt',
+    # 临时文件路径 存放训练过程发送/接收的数据
+    "temp_path":"E:\\fedcode\Federal_Learning\\fed_lth\\temp",
     #总客户端数量
-    "num_client" : 2,
+    "num_client" : 1,
 	
     #可选参数：‘mnist’， ‘cifar’
     #数据信息：联邦学习训练的数据，此处使用cifar10数据集
