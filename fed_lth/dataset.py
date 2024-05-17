@@ -6,7 +6,7 @@ from torchvision import datasets, transforms
 from conf import conf
 
 # 根据客户端id获取数据集
-def get_dataset(client_id):
+def get_dataset(id):
   dir=conf['dataset_dir']
   name=conf['dataset_name']
   # download=true表示从下载数据集并把数据集放在root路径中
