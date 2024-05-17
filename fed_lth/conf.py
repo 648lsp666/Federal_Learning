@@ -1,4 +1,5 @@
-
+# @zhy
+# fedlth的设置模块
 conf={
     #服务器IP地址
     "ip":"127.0.0.1",
@@ -9,6 +10,11 @@ conf={
     # # 模型信息：即当前任务使用的模型结构，此处为ResNet-18图像分类模型
     "model_name" : "resnet18",	
 
+    #数据集名称
+    "dataset_name":'cifar10',
+    #数据集位置
+    "dataset_dir":'E:\\fedcode\Federal_Learning\\fed_lth\data',
+
     #初始模型的文件路径：
     "init_model":'E:\\fedcode\Federal_Learning\\fed_lth\models\init_resnet18.pt',
     # 临时文件路径 存放训练过程发送/接收的数据
@@ -16,11 +22,14 @@ conf={
     #总客户端数量
     "num_client" : 1,
 	
-    #可选参数：‘mnist’， ‘cifar’
-    #数据信息：联邦学习训练的数据，此处使用cifar10数据集
-    #为了模拟横向建模，数据集将按样本维度，切分为多份不重叠的数据
-    #每一份放置在每一个客户端中作为本地训练数据
-	"dataset" : "mnist",
+
+    #noniid设置：
+    'n_class':10,
+
+    'nsamples':20,
+
+    'rate_unbalance':1.0,
+
 	
     #全局迭代次数：即服务端和客户端的通信次数
     #通常会设置一个最大的全局迭代次数，但在训练过程中，只要模型满足收敛的条件，那么训练也可以提前终止

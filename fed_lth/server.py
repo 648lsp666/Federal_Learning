@@ -1,12 +1,14 @@
+# @zhy
+# fedlth项目的服务器模块
+
+
 # 非阻塞模块
 import socketserver
 import time
 from conf import conf
 
 import os,struct
-# python对象传输 序列化
-import pickle,zlib
-import models,torch,random
+
 
 
 # class fed_server(socketserver.ThreadingTCPServer):
@@ -42,7 +44,7 @@ import models,torch,random
 
 
 # 定义消息处理类
-class fed_handler(socketserver.BaseRequestHandler):
+class Fed_handler(socketserver.BaseRequestHandler):
  
   #记录当前连接的客户端
   clients=[]
@@ -85,7 +87,11 @@ class fed_handler(socketserver.BaseRequestHandler):
   
   #客户端分组过程
   def client_group(self):
-    pass
+    #第一步 接收客户端训练时间等信息
+    
+    #分组完成
+    self.stage=='prune'
+    
 
 
 
@@ -140,16 +146,17 @@ class fed_handler(socketserver.BaseRequestHandler):
       if self.stage=='group':
         #客户端分组阶段
         self.client_group()
-      
+      if self.stage=='prune':
+        self.prune()
+
 
   def finish(self):
-        pass
+    pass
 
 
 if __name__ == "__main__":
-    # 初始化参数
-    # 创建多线程实例
-    server = socketserver.ThreadingTCPServer((conf['ip'], conf['port']), fed_handler)
-    print('Wait for client...')
-    # 开启多线程，等待连接
-    server.serve_forever()
+  # 创建多线程实例
+  server = socketserver.ThreadingTCPServer((conf['ip'], conf['port']), Fed_handler)
+  print('Wait for client...')
+  # 开启多线程，等待连接
+  server.serve_forever()
