@@ -9,16 +9,18 @@ conf={
 
     # # 模型信息：即当前任务使用的模型结构，此处为ResNet-18图像分类模型
     "model_name" : "resnet18",	
-
+    "arch_name" : "res18",
     #数据集名称
     "dataset_name":'cifar10',
     #数据集位置
-    "dataset_dir":'E:\\fedcode\Federal_Learning\\fed_lth\data',
+    "dataset_dir":'datasets/cifar10',
+    "use_sparse_conv" : False,
 
     #初始模型的文件路径：
-    "init_model":'E:\\fedcode\Federal_Learning\\fed_lth\models\init_resnet18.pt',
+    "pretrained" : "resnet18_cifar10_lt_0.2_s1_rewind_16/1checkpoint.pth.tar",
+    #"init_model":'E:\\fedcode\Federal_Learning\\fed_lth\models\init_resnet18.pt',
     # 临时文件路径 存放训练过程发送/接收的数据
-    "temp_path":"E:\\fedcode\Federal_Learning\\fed_lth\\temp",
+    "temp_path":"temp",
     #总客户端数量
     "num_client" : 1,
 	
@@ -42,11 +44,16 @@ conf={
 	"batch_size" : 32,
 	
     #本地模型进行训练时的参数-学习率
-	"lr" : 0.001,
-	
+	"lr" : 0.01,
+    "decreasing_lr" : "80,120",
     #本地模型进行训练时的参数-momentum
 	"momentum" : 0.0001,
-	
+	#weight decay
+    "weight_decay" : "0.0001",
+
     #本地模型进行训练时的参数-正则化参数
-	"lambda" : 1
+	"lambda" : 1,
+
+    #Global_model设备
+    "global_dev" : 'cuda:0'
 }
