@@ -16,12 +16,12 @@ class Global_model(object):
   def aggregate():
     pass
 
-  # 每一轮FL非结构剪枝,输入剪枝率
+  # 每一轮FL非结构剪枝,输入剪枝率@mk
   def u_prune(ratio):
     pass
 
 
-  # 掩码结构化重组
+  # 掩码结构化重组@mk
   def regroup():
     pass
 
@@ -30,6 +30,6 @@ if __name__=='__main__':
   for i in range(3):
     global_model.u_prune()
   global_model.regroup()
-  # 这里写简单的测试
+  # 这里写简单的测试@mk
   # 随便剪枝几次 然后regroup一下 ，函数能跑通就行 我后面再调试@zhy
   pass
