@@ -48,5 +48,14 @@ conf={
 	"momentum" : 0.0001,
 	
     #本地模型进行训练时的参数-正则化参数
+<<<<<<< Updated upstream
 	"lambda" : 1
+=======
+	"lambda" : 1,
+
+    "prune_type" : "lt",
+
+    #Global_model设备
+    "global_dev" : 'cuda:0'
+>>>>>>> Stashed changes
 }
