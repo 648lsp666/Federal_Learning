@@ -6,7 +6,7 @@ from torchvision import datasets, transforms
 
 from utils import *
 from pruning_utils import *
-from pruning_utils import regroup
+from pruning_utils import regroup as prune_regroup
 from conf import conf
 
 
@@ -56,7 +56,7 @@ class Global_model(object):
     for key in current_mask:
       mask = current_mask[key]
       shape = current_mask[key].shape
-      current_mask[key] = regroup(mask.view(shape[0], -1)).view(*shape)
+      current_mask[key] = prune_regroup(mask.view(shape[0], -1)).view(*shape)
       #print(current_mask[key].mean())
     prune_model_custom(self.model, current_mask)
     # prune_random_betweeness(model, current_mask, int(args.num_paths), downsample=downsample, conv1=args.conv1)
