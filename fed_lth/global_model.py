@@ -4,19 +4,15 @@ import torch
 import numpy as np
 from torchvision import datasets, transforms
 
+from utils import *
+from pruning_utils import *
+from pruning_utils import regroup
 from conf import conf
 
 
 class Global_model(object):
   # 初始化的变量在这里面
   def __init__(self) -> None:
-<<<<<<< Updated upstream
-    self.init_model=torch.load(conf['init_model'])
-  
-  #聚合函数 
-  def aggregate(self):
-    pass
-=======
     self.device = torch.device(conf['global_dev'])
     self.model, self.train_loader, self.val_loader, self.test_loader = setup_model_dataset(conf)
     self.model.to(self.device)
@@ -33,7 +29,6 @@ class Global_model(object):
     self.sub_epoch = conf['local_epoch']
 
     self.load_pretrained()
->>>>>>> Stashed changes
 
   #聚合函数.local_weights应当是包含多个model.state_dict()的列表
   def aggregate(self,local_weights):
@@ -67,8 +62,6 @@ class Global_model(object):
     # prune_random_betweeness(model, current_mask, int(args.num_paths), downsample=downsample, conv1=args.conv1)
     #check_sparsity(self.model, conv1=args.conv1)
 
-<<<<<<< Updated upstream
-=======
   # 载入预训练模型(彩票)
   def load_pretrained(self):
     initalization = torch.load(conf['pretrained'], map_location=self.device)
@@ -108,7 +101,6 @@ class Global_model(object):
       w_avg[key] = torch.div(w_avg[key], len(w))
     return w_avg
 
->>>>>>> Stashed changes
 if __name__=='__main__':
   global_model=Global_model()
   test_rate = 0.2
