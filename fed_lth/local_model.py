@@ -13,6 +13,7 @@ import torch_pruning as tp
 import torch.nn as nn
 import torch.optim as optim
 
+example_inputs = torch.randn(1, 3, 224, 224)
 
 class MySlimmingImportance(tp.importance.Importance):
   def __call__(self, group, **kwargs):
