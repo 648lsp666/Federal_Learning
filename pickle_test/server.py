@@ -1,6 +1,7 @@
 import socket
 import pickle
 import struct
+import torch
 import torchvision
 
 def receive_data(conn):
@@ -17,7 +18,6 @@ def receive_data(conn):
         if not packet:
             break
         data += packet
-        print('.',end='')
 
     return pickle.loads(data)
 
@@ -33,6 +33,7 @@ def start_server(host, port):
     # 接收数据
     data_dict = receive_data(conn)
     if data_dict:
+        #torch.save(data_dict,"model.pth")
         print(f"Received data: {data_dict}")
 
     conn.close()
