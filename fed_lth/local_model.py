@@ -121,6 +121,8 @@ class Local_model(object):
     end = 1.0
     step = 0.1
     current = start
+    # 剪枝前的参数数量和计算量
+    base_macs, base_nparams = tp.utils.count_ops_and_params(self.model, example_inputs)
     while current <= end:
       self.model = model
       self.s_prune(current)
