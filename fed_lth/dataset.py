@@ -58,7 +58,7 @@ def get_dataset(id):
   # sampler指定子集合
   train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=conf["batch_size"], sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices))
   eval_loader = torch.utils.data.DataLoader(eval_dataset, batch_size=conf["batch_size"], sampler=torch.utils.data.sampler.SubsetRandomSampler(eval_indices)) 
-  return train_loader, eval_loader
+  return train_loader, eval_loader,train_data_len,eval_data_len
   
 
 # 以下用于划分noniid数据集，暂时没用
