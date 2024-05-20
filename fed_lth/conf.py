@@ -13,12 +13,13 @@ conf={
     #数据集名称
     "dataset_name":'cifar10',
     #数据集位置
-    "dataset_dir":'datasets/cifar10',
+    "dataset_dir":'data',
+    # "dataset_dir":'datasets/cifar10',
     "use_sparse_conv" : False,
 
     #初始模型的文件路径：
-    "pretrained" : "resnet18_cifar10_lt_0.2_s1_rewind_16/1checkpoint.pth.tar",
-    #"init_model":'E:\\fedcode\Federal_Learning\\fed_lth\models\init_resnet18.pt',
+    # "pretrained" : "resnet18_cifar10_lt_0.2_s1_rewind_16/1checkpoint.pth.tar",
+    "init_model":'models\init_resnet18.pt',
     # 临时文件路径 存放训练过程发送/接收的数据
     "temp_path":"temp",
     #总客户端数量

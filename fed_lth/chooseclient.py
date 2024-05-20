@@ -45,7 +45,14 @@ def init_valid_group(max_attempts=1000000):
     raise Exception("Failed to initialize a valid group after many attempts")
 
 # 模拟退火算法实现客户端组选择
-def simulated_annealing():
+    # client_info=[{'id':0,
+    #   'data_dis':[1,2,3],
+    #   'train_data_len':6, 
+    #   'train_time':100, 
+    #   'prune_ratio':0.7 },
+    #   ]
+# 输入客户端列表，类别数量，剪枝率上限，数据集数量下限，其中每个客户端的信息按client_info格式@wcy
+def simulated_annealing(clients,B,d,p_M):
 
     current_M = init_valid_group()  # 初始化一个有效的客户端组
     current_score = calculate_QCID(current_M)  # 计算初始组的 QClD 值
@@ -71,7 +78,12 @@ def simulated_annealing():
     return current_M, current_score
 
 if __name__=='__main__':
-
+    # client_info=[{'id':0,
+    #   'data_dis':[1,2,3],
+    #   'train_data_len':6, 
+    #   'train_time':100, 
+    #   'prune_ratio':0.7 },
+    #   ]
     # 定义客户端数量和其他参数
     num_clients = 10
     B = 3  # 类别数量

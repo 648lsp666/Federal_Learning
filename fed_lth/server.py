@@ -6,9 +6,9 @@
 import socketserver
 import time
 from conf import conf
-
+from global_model import Global_model
 import os,struct,pickle
-
+from chooseclient import simulated_annealing
 
 
 # class fed_server(socketserver.ThreadingTCPServer):
@@ -45,7 +45,7 @@ import os,struct,pickle
 
 # 定义消息处理类
 class Fed_handler(socketserver.BaseRequestHandler):
- 
+  global_model=Global_model()
   #记录当前连接的客户端
   clients=[]
   # 就绪的客户端数目
@@ -58,11 +58,7 @@ class Fed_handler(socketserver.BaseRequestHandler):
   #FL服务器当前的阶段，初始化为'conn'与客户端建立连接；‘group’:客户端分组；‘prune’:训练剪枝；‘train’：剪枝完成；‘finish’训练完成
   stage='conn'
   client_info_list=[]
-# client_info=
-# {'data_dis':list,数据分布
-#                    'train_data_len':number, 训练集大小
-#                    'train_time':number, 训练时间
-#                    'prune_ratio':number 剪枝率，默认是0}
+
   # 首先执行setup方法，然后执行handle方法，最后执行finish方法
   # 如果handle方法报错，则会跳过
   # setup与finish无论如何都会执行
@@ -87,35 +83,47 @@ class Fed_handler(socketserver.BaseRequestHandler):
       self.ready_client=len(self.clients) 
       #开始客户端分组
       self.stage='group'
-      self.broadcast(self.clients,'msg','group')
+      self.broadcast(self.clients,'data','group')
   
   #客户端分组过程
   def client_group(self):
-    while len(self.client_info)<len(self.client):
+    while self.ready_client<conf['num_client']:
       #第一步 接收客户端训练时间等信息
+      # client_info=
+# {'data_dis':list,数据分布
+#                    'train_data_len':number, 训练集大小
+#                    'train_time':number, 训练时间
+#                    'prune_ratio':number 剪枝率，默认是0}
       data=self.recv_data()
       self.client_info.append(data)
-    #接收到所有客户端数据，将平均值作为训练时间阈值
+      self.ready_client += 1
+    #接收到所有客户端数据，计数重新归零
+    self.ready_client=0
+    # 将平均值作为训练时间阈值
     time_list=[info['train_time']for info in self.client_info]
     avgtime=sum(time_list)/len(time_list)
     #广播时间阈值
     self.broadcast(self.client,'data',avgtime)
-
-
-
-
+    #等待客户端返回剪枝率
+    while self.ready_client<conf['num_client']:
+      self.ready_client+=1
+      data=self.recv_data()
+      #data[0]客户端id; data[1] 剪枝率
+      for info in self.client_info:
+        if info['id']==data[0]:
+          info['prune_ratio']=data[1]
+    # 全部接收到消息，计数重置
+    self.ready_client=0
+    # 开始模拟退火分组
+    groups=simulated_annealing() 
     #分组完成
     self.stage=='prune'
     
 
 
 
-  #广播函数，要发送的客户端列表clients，发送的类型type：'msg'/ 'file' / data,发送的消息/文件路径 content
+  #广播函数，要发送的客户端列表clients，发送的类型type 'file' / 'data',发送的消息/文件路径 content
   def broadcast(self, clients, content_type, content):
-    # 发送消息
-    if content_type=='msg':
-      for client in clients:
-        client.sendall(content.encode())
     # 发送文件
     if content_type=='file':
     # 遍历所有客户端，向他们发送消息/文件

@@ -73,7 +73,7 @@ def get_dataset(id):
 #从dataloader统计数据分布
 def dis_total(loader):
     label_counter=Counter()
-    for data, labels in loader:
+    for _, labels in loader:
     # 更新计数器
         label_counter.update(labels.tolist())  # 假设 labels 是一个 torch 张量  
     label_list=[0]*10
