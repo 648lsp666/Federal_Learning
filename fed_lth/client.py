@@ -80,9 +80,6 @@ def recv_data(conn):
 
 
 if __name__ == "__main__":
-  
-  #加载本地数据集
-
   # 服务端为TCP方式，客户端也采用TCP方式，默认参数即为TCP
   client = socket.socket()
   # 连接主机
@@ -112,7 +109,11 @@ if __name__ == "__main__":
     # 在prune_ratio函数中测出客户端在该时间阈值下的剪枝率
     prune_ratio=local_model.prune_ratio(train_time_T)
     # 上传该剪枝率
-    client.sendall(pickle.dumps(prune_ratio))
+    client.sendall(pickle.dumps([client_id,prune_ratio]))
+    
+
+
+
   # 定义发送循环信息，等待服务器分组和调用训练
   while True:
     # 接收主机信息 每次接收缓冲区1024个字节
