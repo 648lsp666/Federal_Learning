@@ -7,7 +7,7 @@ import socketserver
 import time
 from conf import conf
 
-import os,struct
+import os,struct,pickle
 
 
 
@@ -57,8 +57,12 @@ class Fed_handler(socketserver.BaseRequestHandler):
   client_loss=[]
   #FL服务器当前的阶段，初始化为'conn'与客户端建立连接；‘group’:客户端分组；‘prune’:训练剪枝；‘train’：剪枝完成；‘finish’训练完成
   stage='conn'
-
-
+  client_info_list=[]
+# client_info=
+# {'data_dis':list,数据分布
+#                    'train_data_len':number, 训练集大小
+#                    'train_time':number, 训练时间
+#                    'prune_ratio':number 剪枝率，默认是0}
   # 首先执行setup方法，然后执行handle方法，最后执行finish方法
   # 如果handle方法报错，则会跳过
   # setup与finish无论如何都会执行
@@ -87,15 +91,26 @@ class Fed_handler(socketserver.BaseRequestHandler):
   
   #客户端分组过程
   def client_group(self):
-    #第一步 接收客户端训练时间等信息
-    
+    while len(self.client_info)<len(self.client):
+      #第一步 接收客户端训练时间等信息
+      data=self.recv_data()
+      self.client_info.append(data)
+    #接收到所有客户端数据，将平均值作为训练时间阈值
+    time_list=[info['train_time']for info in self.client_info]
+    avgtime=sum(time_list)/len(time_list)
+    #广播时间阈值
+    self.broadcast(self.client,'data',avgtime)
+
+
+
+
     #分组完成
     self.stage=='prune'
     
 
 
 
-  #广播函数，要发送的客户端列表clients，发送的类型type：'msg'or 'file',发送的消息/文件路径 content
+  #广播函数，要发送的客户端列表clients，发送的类型type：'msg'/ 'file' / data,发送的消息/文件路径 content
   def broadcast(self, clients, content_type, content):
     # 发送消息
     if content_type=='msg':
@@ -106,6 +121,9 @@ class Fed_handler(socketserver.BaseRequestHandler):
     # 遍历所有客户端，向他们发送消息/文件
       for client in clients:
         self.send_file(client,content)
+    if content_type=='data':
+      for client in clients:
+        self.sendall(pickle.dumps(content))    
       
     #向单个客户端发送文件函数
     # sock:接收方socket
@@ -136,6 +154,28 @@ class Fed_handler(socketserver.BaseRequestHandler):
             file_size -= len(chunk)
             file.write(chunk)
     print("File received successfully.")
+
+
+  # 接收数据函数     
+  # sock:接收方socket
+  def recv_data(conn):
+    # 接收数据大小
+    size_data = conn.recv(4)
+    if not size_data:
+      return None
+    data_size = struct.unpack('>I', size_data)[0]
+
+    # 接收数据内容
+    data = b""
+    while len(data) < data_size:
+      packet = conn.recv(4096)
+      if not packet:
+        break
+      data += packet
+
+    return pickle.loads(data)
+    
+
 
   #服务器总处理响应函数，通过self.stage确定当前的执行流程
   def handle(self):

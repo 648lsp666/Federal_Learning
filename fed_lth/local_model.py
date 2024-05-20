@@ -10,6 +10,7 @@ import time
 import torchvision
 from torchvision.models import resnet18
 import torch_pruning as tp
+<<<<<<< HEAD
 import torch.nn as nn
 import torch.optim as optim
 
@@ -34,14 +35,21 @@ class MySlimmingPruner(tp.pruner.MetaPruner):
     for m in model.modules():
       if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)) and m.affine:
         m.weight.grad.data.add_(reg * torch.sign(m.weight.data))
+=======
+from pruning_utils import MySlimmingImportance,MySlimmingPruner
+import torch.nn as nn
+import torch.optim as optim
+>>>>>>> main
 
 class Local_model(object):
   def __init__(self, id):
     self.id=id
     self.model=None  #默认为none 等待服务器下发模型
-    # 本地数据集
-    self.train_data,self.test_data=get_dataset(id)
-
+    # 本地数据集的loader
+    self.train_data,self.test_data, self.train_dis,_=get_dataset(id)
+    self.train_len=sum(self.train_dis)
+    print(self.train_dis)
+  
   # 随机训练测试时间
   def time_test(self):
     # 随机训练测试时间
@@ -69,8 +77,13 @@ class Local_model(object):
 
     # 计算并打印时间
     elapsed_time = end_time - start_time
+<<<<<<< HEAD
     final_time = len(self.test_data)*elapsed_time/16
 
+=======
+    final_time = self.train_len*elapsed_time/16
+    print(f'final_time:{final_time}')
+>>>>>>> main
     return final_time
 
   def s_prune(self,ratio):
@@ -95,6 +108,7 @@ class Local_model(object):
       ignored_layers=ignored_layers,
     )
 
+<<<<<<< HEAD
     # 定义损失函数和优化器（可更改）
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
@@ -112,6 +126,25 @@ class Local_model(object):
       loss.backward()
       pruner.regularize(self.model, reg=1e-5)  # 稀疏化
       optimizer.step()
+=======
+    # # 定义损失函数和优化器（可更改）
+    # criterion = nn.CrossEntropyLoss()
+    # optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
+
+    # # 模拟训练数据
+    # inputs = torch.randn(16, 3, 224, 224)  # 16张 224x224 的图片
+    # labels = torch.randint(0, 1000, (16,))  # 16个标签，范围在0-999之间
+
+    # # 进行稀疏训练
+    # for epoch in range(5):  # 训练5个epoch
+    #   self.model.train()
+    #   optimizer.zero_grad()
+    #   outputs = self.model(inputs)
+    #   loss = criterion(outputs, labels)
+    #   loss.backward()
+    #   pruner.regularize(self.model, reg=1e-5)  # 稀疏化
+    #   optimizer.step()
+>>>>>>> main
 
     pruner.step()
 
@@ -120,17 +153,27 @@ class Local_model(object):
     model = self.model
     start = 0.0
     end = 1.0
+<<<<<<< HEAD
     step = 0.1
     current = start
     # 剪枝前的参数数量和计算量
     base_macs, base_nparams = tp.utils.count_ops_and_params(self.model, example_inputs)
+=======
+    step = 0.03
+    current = start
+>>>>>>> main
     while current <= end:
       self.model = model
       self.s_prune(current)
       if self.time_test() <= time_T:
+<<<<<<< HEAD
         self.model = model
         macs, nparams = tp.utils.count_ops_and_params(self.model, example_inputs)
         prune_ratio = (base_nparams - nparams) / base_nparams * 100
+=======
+        self.model = torchvision.models.resnet18()
+        prune_ratio = current
+>>>>>>> main
         break
       current += step
     return prune_ratio
@@ -139,11 +182,15 @@ class Local_model(object):
 
 #测试代码写在这里面
 if __name__=='__main__':
-  local=Local_model(1)
+  local=Local_model(0)
   local.model=torchvision.models.resnet18()
   train_time=local.time_test()
   print(train_time)
+<<<<<<< HEAD
   time_T=1000
+=======
+  time_T=470
+>>>>>>> main
   prune_ratio=local.prune_ratio(time_T)
   print(prune_ratio)
 
@@ -155,4 +202,8 @@ if __name__=='__main__':
   # 剪枝后计算模型参数和计算量
   macs, nparams = tp.utils.count_ops_and_params(local.model, example_inputs)
   print("参数数量: {:.2f} M => {:.2f} M".format(base_nparams / 1e6, nparams / 1e6))
+<<<<<<< HEAD
+=======
+  print("稀疏率: {:.2f}%".format((base_nparams - nparams )/base_nparams))
+>>>>>>> main
   print("计算量: {:.2f} G => {:.2f} G".format(base_macs / 1e9, macs / 1e9))

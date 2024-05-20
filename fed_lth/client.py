@@ -54,11 +54,24 @@ def send_file(sock, filename):
         break
       sock.sendall(chunk)
 
-# 接收消息函数     
+# 接收数据函数     
 # sock:接收方socket
-def recv_msg(sock):
-  data=sock.recv(1024)
-  return data.decode()
+def recv_data(conn):
+  # 接收数据大小
+  size_data = conn.recv(4)
+  if not size_data:
+    return None
+  data_size = struct.unpack('>I', size_data)[0]
+
+  # 接收数据内容
+  data = b""
+  while len(data) < data_size:
+    packet = conn.recv(4096)
+    if not packet:
+      break
+    data += packet
+
+  return pickle.loads(data)
 
 
 
@@ -81,18 +94,24 @@ if __name__ == "__main__":
 
   #初始化本地模型
   local_model=Local_model(client_id)
+
   #开始客户端分组
-  op=recv_msg(client)
+  op=recv_data(client)
   if op=='group':
     #第一步 测量本地训练时间
     train_time=local_model.time_test()
-    #第二步 上传本地信息:训练集大小、数据分布、训练时间
-    client.sendall(pickle.dumps(['训练集大小','数据分布',train_time]))
+    #第二步 上传本地信息:客户端id 训练集大小、数据分布、训练时间
+    client_info={'id':client_id,
+      'data_dis':local_model.train_dis,
+      'train_data_len':local_model.train_len, 
+      'train_time':train_time, 
+      'prune_ratio':0 }
+    client.sendall(pickle.dumps(client_info))
     #第三步 接收服务器下发的时间阈值，本地随机剪枝测时间
-    train_time_T=recv_msg(client)
-      # 在prune_ratio函数中测出客户端在该时间阈值下的剪枝率
+    train_time_T=recv_data(client)
+    # 在prune_ratio函数中测出客户端在该时间阈值下的剪枝率
     prune_ratio=local_model.prune_ratio(train_time_T)
-      # 上传该剪枝率
+    # 上传该剪枝率
     client.sendall(pickle.dumps(prune_ratio))
   # 定义发送循环信息，等待服务器分组和调用训练
   while True:

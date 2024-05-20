@@ -587,3 +587,27 @@ def prune_admm(model, train_loader, loss, rate, optimizer):
         masks[name + ".weight_mask"] = mask
     
     return masks
+
+
+
+
+######以下是torch——pruning库剪枝
+import torch_pruning as tp
+class MySlimmingImportance(tp.importance.Importance):
+  def __call__(self, group, **kwargs):
+    group_imp = []
+    for dep, idxs in group:
+      layer = dep.target.module
+      prune_fn = dep.handler
+      if isinstance(layer, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)) and layer.affine:
+        importance_scores = torch.abs(layer.weight.data)  # 使用 L1 范数计算重要性
+        group_imp.append(importance_scores)
+    if len(group_imp) == 0: return None
+    group_imp = torch.stack(group_imp, dim=0).mean(dim=0)
+    return group_imp
+
+class MySlimmingPruner(tp.pruner.MetaPruner):
+  def regularize(self, model, reg):
+    for m in model.modules():
+      if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)) and m.affine:
+        m.weight.grad.data.add_(reg * torch.sign(m.weight.data)) 
