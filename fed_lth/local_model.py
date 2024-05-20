@@ -18,9 +18,11 @@ class Local_model(object):
   def __init__(self, id):
     self.id=id
     self.model=None  #默认为none 等待服务器下发模型
-    # 本地数据集
-    self.train_data,self.test_data, self.train_len,_=get_dataset(id)
-
+    # 本地数据集的loader
+    self.train_data,self.test_data, self.train_dis,_=get_dataset(id)
+    self.train_len=sum(self.train_dis)
+    print(self.train_dis)
+  
   # 随机训练测试时间
   def time_test(self):
     # 随机训练测试时间

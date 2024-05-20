@@ -20,5 +20,5 @@ def send_data(host, port, data):
     client_socket.close()
 
 if __name__ == "__main__":
-    data = torchvision.models.resnet18()
+    data = '123'
     send_data('localhost', 12345, data)

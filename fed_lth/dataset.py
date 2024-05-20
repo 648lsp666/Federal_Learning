@@ -1,6 +1,7 @@
 # @zhy 暂时没用 准备用来获取数据集和分割数据集
 import torch 
 import numpy as np
+from collections import Counter
 from torchvision import datasets, transforms
 
 from conf import conf
@@ -58,8 +59,25 @@ def get_dataset(id):
   # sampler指定子集合
   train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=conf["batch_size"], sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices))
   eval_loader = torch.utils.data.DataLoader(eval_dataset, batch_size=conf["batch_size"], sampler=torch.utils.data.sampler.SubsetRandomSampler(eval_indices)) 
+    
+  #写一个统计各类数据数量分布的函数，得到一个长度10的list，
+  train_data_len = dis_total(train_loader)
+
+
   return train_loader, eval_loader,train_data_len,eval_data_len
-  
+
+#从dataloader统计数据分布
+def dis_total(loader):
+    label_counter=Counter()
+    for data, labels in loader:
+    # 更新计数器
+        label_counter.update(labels.tolist())  # 假设 labels 是一个 torch 张量  
+    label_list=[0]*10
+    for label, count in label_counter.items():
+        label_list[label]=count
+    return label_list
+
+   
 
 # 以下用于划分noniid数据集，暂时没用
 def cifar_extr_noniid(train_dataset, test_dataset, num_users = conf['num_client'], n_class=conf['n_class'], num_samples=conf['nsamples'], rate_unbalance=conf['rate_unbalance']):
