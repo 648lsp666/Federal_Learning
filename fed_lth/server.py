@@ -6,9 +6,9 @@
 import socket,socketserver
 import time
 from conf import conf
-# from global_model import Global_model
+from global_model import Global_model
 import os,struct,pickle
-# from chooseclient import simulated_annealing
+from chooseclient import simulated_annealing
 
 
 # class fed_server(socketserver.ThreadingTCPServer):
@@ -45,12 +45,12 @@ import os,struct,pickle
 
 # 定义消息处理类
 class Fed_handler(socketserver.BaseRequestHandler):
-	# global_model=Global_model()
+	global_model=Global_model()
 	#记录当前连接的客户端
 	clients=[]
 	# 就绪的客户端数目
 	ready_client=0
-	# 全局联邦训练周期
+	# 全局联邦训练周期,从0开始
 	global_epoch=0
 	#全局模型效果
 	client_acc=[]
@@ -58,6 +58,12 @@ class Fed_handler(socketserver.BaseRequestHandler):
 	#FL服务器当前的阶段，初始化为'conn'与客户端建立连接；‘group’:客户端分组；‘prune’:训练剪枝；‘train’：剪枝完成；‘finish’训练完成
 	stage='conn'
 	client_info_list=[]
+	#初始客户端组的id
+	group_id=0
+	#剪枝间隔轮数
+	prune_step=5
+	client_update=[]
+	
 
 	# 首先执行setup方法，然后执行handle方法，最后执行finish方法
 	# 如果handle方法报错，则会跳过
@@ -181,17 +187,52 @@ class Fed_handler(socketserver.BaseRequestHandler):
 		print(prune_ratio)
 		self.broadcast(self.clients,'data',prune_ratio)
 		# 开始模拟退火分组
-		# groups=simulated_annealing() 
+		# groups,_,_=simulated_annealing() 
+		
+		groups=[[0]]#测试用
 		#分组完成
 		self.stage=='prune'
-		return 'groups'
-		
-	# def prune(self):
-	#   client
-
-
+		return groups
 		
 
+	def train(self,groups):
+		parts=[self.clients[i] for i in groups[self.group_id]]
+		self.broadcast(parts,'data','train')
+		#接受客户端的更新
+		while self.ready_client<conf['num_client']:
+			self.ready_client+=1
+			data=self.recv_data()
+			self.client_update.append(data)
+		#接收到全部更新,开始聚合
+		self.global_model.aggregate(self.client_update)
+		self.global_epoch+=1
+			
+
+
+
+	#LTH迭代剪枝过程
+	#group_id:客户端组id
+	# prune_step:剪枝间隔轮数
+	def prune(self,group_id,prune_step):
+		while self.global_epoch<= conf['global_epoch']:
+			self.train(group_id)
+			if self.global_epoch%prune_step==0:
+				#每过几轮触发一次剪枝
+				#非结构化剪枝
+
+				#如果达到目标剪枝率，跳出循环
+				break
+		# 结构化剪枝重组	
+			
+		#重置模型参数		
+
+		#切换客户端组	
+		self.group_id+=1
+		if self.group_id>10:
+			# 最多分10组
+			# 剪枝结束，开始微调训练
+			self.stage='train'
+				
 
 	#服务器总处理响应函数，通过self.stage确定当前的执行流程
 	def handle(self):

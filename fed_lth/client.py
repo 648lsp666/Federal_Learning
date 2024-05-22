@@ -116,6 +116,8 @@ if __name__ == "__main__":
     print('group finish')
     data=recv_data(client)
     print('prune')
+
+    
   if op=='prune':
     pass
     
