@@ -3,12 +3,12 @@
 
 
 # 非阻塞模块
-import socketserver
+import socket,socketserver
 import time
 from conf import conf
-from global_model import Global_model
+# from global_model import Global_model
 import os,struct,pickle
-from chooseclient import simulated_annealing
+# from chooseclient import simulated_annealing
 
 
 # class fed_server(socketserver.ThreadingTCPServer):
@@ -45,161 +45,170 @@ from chooseclient import simulated_annealing
 
 # 定义消息处理类
 class Fed_handler(socketserver.BaseRequestHandler):
-  global_model=Global_model()
-  #记录当前连接的客户端
-  clients=[]
-  # 就绪的客户端数目
-  ready_client=0
-  # 全局联邦训练周期
-  global_epoch=0
-  #全局模型效果
-  client_acc=[]
-  client_loss=[]
-  #FL服务器当前的阶段，初始化为'conn'与客户端建立连接；‘group’:客户端分组；‘prune’:训练剪枝；‘train’：剪枝完成；‘finish’训练完成
-  stage='conn'
-  client_info_list=[]
+	# global_model=Global_model()
+	#记录当前连接的客户端
+	clients=[]
+	# 就绪的客户端数目
+	ready_client=0
+	# 全局联邦训练周期
+	global_epoch=0
+	#全局模型效果
+	client_acc=[]
+	client_loss=[]
+	#FL服务器当前的阶段，初始化为'conn'与客户端建立连接；‘group’:客户端分组；‘prune’:训练剪枝；‘train’：剪枝完成；‘finish’训练完成
+	stage='conn'
+	client_info_list=[]
 
-  # 首先执行setup方法，然后执行handle方法，最后执行finish方法
-  # 如果handle方法报错，则会跳过
-  # setup与finish无论如何都会执行
-  # 一般只定义handle方法即可
-  def setup(self):
-    pass
+	# 首先执行setup方法，然后执行handle方法，最后执行finish方法
+	# 如果handle方法报错，则会跳过
+	# setup与finish无论如何都会执行
+	# 一般只定义handle方法即可
+	def setup(self):
+		pass
 
+	#广播函数，要发送的客户端列表clients，发送的类型type 'file' / 'data',发送的消息/文件路径 content
+	def broadcast(self, clients, content_type, content):
+		# 发送文件
+		if content_type=='file':
+		# 遍历所有客户端，向他们发送消息/文件
+			for client in clients:
+				self.send_file(client,content)
+		if content_type=='data':
+			for client in clients:
+				self.send_data(client,content)    
+			
+		#向单个客户端发送文件函数
+		# sock:接收方socket
+		# filename：文件路径
+	def send_file(self, sock, filename):
+		with open(filename, 'rb') as file:
+			file_size = os.path.getsize(filename)
+			print(f"Sending {filename} of size {file_size} bytes.")
+			sock.sendall(struct.pack('>I', file_size))  # 大端序打包文件大小
+			# 发送文件内容
+			while True:
+				chunk = file.read(1024)
+				if not chunk:
+					print(f"File {filename} sent successfully.")
+					break
+				sock.sendall(chunk)
+		
+	#接收文件函数
+	def recv_file(self,sock):
+		# 接收文件大小
+		size_data = sock.recv(4)
+		file_size = struct.unpack('>I', size_data)[0]  # 大端序解包文件大小
 
-  #与客户端建立链接，添加客户端列表self.clients，在handle中调用
-  def conn_clients(self):
-    #添加到客户端列表
-    self.clients.append(self.request)
-    print(f'客户端{len(self.clients)}已连接:{self.request}')
-    #向该客户端发送id和初始模型
-    self.request.sendall(struct.pack('>I',len(self.clients)))#发送id
-    self.send_file(self.request,conf['init_model'])#发送初始模型
+		# 接收文件内容并写入文件
+		with open('received_file', 'wb') as file:
+				while file_size > 0:
+						chunk = sock.recv(min(1024, file_size))
+						file_size -= len(chunk)
+						file.write(chunk)
+		print("File received successfully.")
 
-    if len(self.clients)== conf['num_client']:
-      #所有客户端已经连接
-      print(f'All clients connected! Clients:{len(self.clients)}')
-      #所有客户端就绪
-      self.ready_client=len(self.clients) 
-      #开始客户端分组
-      self.stage='group'
-      self.broadcast(self.clients,'data','group')
-  
-  #客户端分组过程
-  def client_group(self):
-    while self.ready_client<conf['num_client']:
-      #第一步 接收客户端训练时间等信息
-      # client_info=
-# {'data_dis':list,数据分布
-#                    'train_data_len':number, 训练集大小
-#                    'train_time':number, 训练时间
-#                    'prune_ratio':number 剪枝率，默认是0}
-      data=self.recv_data()
-      self.client_info.append(data)
-      self.ready_client += 1
-    #接收到所有客户端数据，计数重新归零
-    self.ready_client=0
-    # 将平均值作为训练时间阈值
-    time_list=[info['train_time']for info in self.client_info]
-    avgtime=sum(time_list)/len(time_list)
-    #广播时间阈值
-    self.broadcast(self.client,'data',avgtime)
-    #等待客户端返回剪枝率
-    while self.ready_client<conf['num_client']:
-      self.ready_client+=1
-      data=self.recv_data()
-      #data[0]客户端id; data[1] 剪枝率
-      for info in self.client_info:
-        if info['id']==data[0]:
-          info['prune_ratio']=data[1]
-    # 全部接收到消息，计数重置
-    self.ready_client=0
-    # 开始模拟退火分组
-    groups=simulated_annealing() 
-    #分组完成
-    self.stage=='prune'
-    
+	def recv_data(self, expect_msg_type=None):
+		sock=self.request
+		msg_len = struct.unpack(">I", sock.recv(4))[0]
+		msg = sock.recv(msg_len, socket.MSG_WAITALL)
+		msg = pickle.loads(msg)
 
+		if (expect_msg_type is not None) and (msg[0] != expect_msg_type):
+			#print(msg)
+			raise Exception("Expected " + expect_msg_type + " but received " + msg[0])
+		return msg
 
-
-  #广播函数，要发送的客户端列表clients，发送的类型type 'file' / 'data',发送的消息/文件路径 content
-  def broadcast(self, clients, content_type, content):
-    # 发送文件
-    if content_type=='file':
-    # 遍历所有客户端，向他们发送消息/文件
-      for client in clients:
-        self.send_file(client,content)
-    if content_type=='data':
-      for client in clients:
-        self.sendall(pickle.dumps(content))    
-      
-    #向单个客户端发送文件函数
-    # sock:接收方socket
-    # filename：文件路径
-  def send_file(self, sock, filename):
-    with open(filename, 'rb') as file:
-      file_size = os.path.getsize(filename)
-      print(f"Sending {filename} of size {file_size} bytes.")
-      sock.sendall(struct.pack('>I', file_size))  # 大端序打包文件大小
-      # 发送文件内容
-      while True:
-        chunk = file.read(1024)
-        if not chunk:
-          print(f"File {filename} sent successfully.")
-          break
-        sock.sendall(chunk)
-    
-  #接收文件函数
-  def recv_file(self,sock):
-    # 接收文件大小
-    size_data = sock.recv(4)
-    file_size = struct.unpack('>I', size_data)[0]  # 大端序解包文件大小
-
-    # 接收文件内容并写入文件
-    with open('received_file', 'wb') as file:
-        while file_size > 0:
-            chunk = sock.recv(min(1024, file_size))
-            file_size -= len(chunk)
-            file.write(chunk)
-    print("File received successfully.")
+	# 发送数据函数     
+	# sock:接收方socket
+	def send_data(self,client_socket, data):
+		# 序列化数据
+		data_bytes = pickle.dumps(data)
+		# 发送数据大小
+		data_size = len(data_bytes)
+		client_socket.sendall(struct.pack('>I', data_size))
+		# 发送数据内容
+		client_socket.sendall(data_bytes)
 
 
-  # 接收数据函数     
-  # sock:接收方socket
-  def recv_data(conn):
-    # 接收数据大小
-    size_data = conn.recv(4)
-    if not size_data:
-      return None
-    data_size = struct.unpack('>I', size_data)[0]
+	#与客户端建立链接，添加客户端列表self.clients，在handle中调用
+	def conn_clients(self):
+		#添加到客户端列表
+		self.clients.append(self.request)
+		print(f'客户端{len(self.clients)}已连接:{self.request}')
+		#向该客户端发送id和初始模型,客户端id从0编号，len-1
+		self.request.sendall(struct.pack('>I',len(self.clients)-1))#发送id
+		self.send_file(self.request,conf['init_model'])#发送初始模型
 
-    # 接收数据内容
-    data = b""
-    while len(data) < data_size:
-      packet = conn.recv(4096)
-      if not packet:
-        break
-      data += packet
+		if len(self.clients)== conf['num_client']:
+			#所有客户端已经连接
+			print(f'All clients connected! Clients:{len(self.clients)}')
+			#开始客户端分组
+			self.stage='group'
+			self.broadcast(self.clients,'data','group')
 
-    return pickle.loads(data)
-    
+	#客户端分组过程
+	def client_group(self):
+		while self.ready_client<conf['num_client']:
+			#第一步 接收客户端训练时间等信息
+			# client_info=
+	# {'data_dis':list,数据分布
+	#                    'train_data_len':number, 训练集大小
+	#                    'train_time':number, 训练时间
+	#                    'prune_ratio':number 剪枝率，默认是0}
+			data=self.recv_data()
+			self.client_info_list.append(data)
+			self.ready_client += 1
+		#接收到所有客户端数据，计数重新归零
+		self.ready_client=0
+		# 将平均值作为训练时间阈值
+		time_list=[info['train_time']for info in self.client_info_list]
+		avgtime=sum(time_list)/len(time_list)
+		#广播时间阈值
+		self.broadcast(self.clients,'data',avgtime)
+		#等待客户端返回剪枝率
+		while self.ready_client<conf['num_client']:
+			self.ready_client+=1
+			data=self.recv_data()
+			#data[0]客户端id; data[1] 剪枝率
+			for info in self.client_info_list:
+				if info['id']==data[0]:
+					info['prune_ratio']=data[1]
+		# 全部接收到消息，计数重置
+		self.ready_client=0
+		#设置剪枝率
+		prune_ratio=[info['prune_ratio']for info in self.client_info_list]
+		# avgtime=sum(time_list)/len(time_list)
+		print(prune_ratio)
+		self.broadcast(self.clients,'data',prune_ratio)
+		# 开始模拟退火分组
+		# groups=simulated_annealing() 
+		#分组完成
+		self.stage=='prune'
+		return 'groups'
+		
+	# def prune(self):
+	#   client
 
 
-  #服务器总处理响应函数，通过self.stage确定当前的执行流程
-  def handle(self):
-    #与客户端建立连接，记录客户端列表
-    if self.stage=='conn':
-      self.conn_clients()
-    while True:
-      if self.stage=='group':
-        #客户端分组阶段
-        self.client_group()
-      if self.stage=='prune':
-        self.prune()
+		
 
 
-  def finish(self):
-    pass
+	#服务器总处理响应函数，通过self.stage确定当前的执行流程
+	def handle(self):
+		#与客户端建立连接，记录客户端列表
+		if self.stage=='conn':
+			self.conn_clients()
+		while True:
+			if self.stage=='group':
+				#客户端分组阶段
+				groups=self.client_group()
+			if self.stage=='prune':
+				self.prune()
+			
+
+
+	def finish(self):
+		pass
 
 
 if __name__ == "__main__":

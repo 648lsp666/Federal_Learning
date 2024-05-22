@@ -65,10 +65,10 @@ def get_dataset(id):
   eval_loader = torch.utils.data.DataLoader(eval_dataset, batch_size=conf["batch_size"], sampler=torch.utils.data.sampler.SubsetRandomSampler(eval_indices)) 
     
   #写一个统计各类数据数量分布的函数，得到一个长度10的list，
-  train_data_len = dis_total(train_loader)
+  train_data_dis = dis_total(train_loader)
+  eval_data_len=dis_total(eval_loader)
 
-
-  return train_loader, eval_loader,train_data_len,eval_data_len
+  return train_loader, eval_loader,train_data_dis,eval_data_len
 
 #从dataloader统计数据分布
 def dis_total(loader):

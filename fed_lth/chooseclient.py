@@ -1,107 +1,112 @@
 import numpy as np
 import random
-import math
 
-
-
-# 计算给定客户端组 M 的 QClD 值
-def calculate_QCID(M):
-    total_q = sum(clients[client]['q'] for client in M)  # 总样本数量
-    sum_qqT = 0
-    for n in M:
-        for m in M:
-            sum_qqT += clients[n]['q'] * clients[m]['q'] * np.dot(clients[n]['alpha'], clients[m]['alpha'])
-    return sum_qqT / (total_q ** 2) - 1 / B
-
-# 生成一个邻居
-def get_neighbor(M):
-    new_M = M.copy()
-    if random.random() < 0.5 and len(new_M) > 1:
-        # 随机移除一个客户端
-        client_to_remove = random.choice(list(new_M))
-        new_M.remove(client_to_remove)
-    else:
-        # 随机添加一个新的客户端
-        choices = list(set(clients.keys()) - new_M)
-        if choices:
-            client_to_add = random.choice(choices)
-            new_M.add(client_to_add)
-    return new_M
-
-# 检查客户端组 M 是否满足限制条件
-def valid_group(M):
-    total_q = sum(clients[client]['q'] for client in M)
-    # 样本数量下限和剪枝率上限检查
-    return total_q >= d**4 and all(clients[client]['p'] < p_M for client in M)
-
-# 初始化一个满足限制条件的客户端组
-def init_valid_group(max_attempts=1000000):
-    attempts = 0
-    while attempts < max_attempts:
-        initial_group = set(random.sample(list(clients.keys()), random.randint(2, len(clients))))
-        if valid_group(initial_group):
-            return initial_group
-        attempts += 1
-    raise Exception("Failed to initialize a valid group after many attempts")
-
-# 模拟退火算法实现客户端组选择
-    # client_info=[{'id':0,
-    #   'data_dis':[1,2,3],
-    #   'train_data_len':6, 
-    #   'train_time':100, 
-    #   'prune_ratio':0.7 },
-    #   ]
-# 输入客户端列表，类别数量，剪枝率上限，数据集数量下限，其中每个客户端的信息按client_info格式@wcy
-def simulated_annealing(clients,B,d,p_M):
-
-    current_M = init_valid_group()  # 初始化一个有效的客户端组
-    current_score = calculate_QCID(current_M)  # 计算初始组的 QClD 值
-    T = 1.0  # 初始温度
-    T_min = 0.00001  # 最低温度
-    alpha = 0.9  # 温度下降率
-
-    while T > T_min:
-        i = 1
-        while i <= 100:
-            new_M = get_neighbor(current_M)  # 生成邻居
-            if valid_group(new_M):
-                new_score = calculate_QCID(new_M)  # 计算新邻居组的 QClD 值
-                ap = math.exp((current_score - new_score) / T)  # 计算接受概率
-                if new_score < current_score or random.random() < ap:
-                    current_M = new_M  # 接受新邻居组
-                    current_score = new_score  # 更新当前最优值
-                    # print(f"Accepted new group: {current_M} with score: {current_score}")
-            i += 1
-        T *= alpha  # 降低温度
-        # print(f"Temperature decreased to {T}")
-
-    return current_M, current_score
-
-if __name__=='__main__':
-    # client_info=[{'id':0,
-    #   'data_dis':[1,2,3],
-    #   'train_data_len':6, 
-    #   'train_time':100, 
-    #   'prune_ratio':0.7 },
-    #   ]
-    # 定义客户端数量和其他参数
-    num_clients = 10
-    B = 3  # 类别数量
-    d = 3  # 数据集大小下限的基数
-    p_M = 0.25  # 剪枝率上限
-
-    # 随机生成客户端数据
-    clients = {}
+# client_info随机生成，测试用
+def generate_client_info(num_clients, B, max_data_len, max_train_time, max_prune_ratio):
+    client_info = []
     for i in range(num_clients):
-        q = random.randint(100, 200)  # 随机样本数量
-        alpha = np.random.dirichlet(np.ones(B), size=1).flatten()  # 随机生成类别分布
-        p = random.uniform(0.1, 0.25)  # 随机剪枝率
-        clients[f'client{i+1}'] = {'q': q, 'alpha': alpha, 'p': p}  # 存储客户端数据
+        data_dis = np.random.dirichlet(np.ones(B), size=1)[0].tolist()  # 生成一个随机的数据分布，和为1
+        train_data_len = random.randint(1, max_data_len)  # 随机生成训练数据长度
+        train_time = random.randint(1, max_train_time)  # 随机生成训练时间
+        prune_ratio = round(random.uniform(0, max_prune_ratio), 2)  # 随机生成剪枝率，保留两位小数
+        
+        client_info.append({
+            'id': i,
+            'data_dis': data_dis,
+            'train_data_len': train_data_len,
+            'train_time': train_time,
+            'prune_ratio': prune_ratio
+        })
+    return client_info
 
-    # 打印每个客户端的信息
-    print("Clients' information:")
-    for client, info in clients.items():
-        print(f"{client}: samples={info['q']}, alpha={info['alpha']}, pruning rate={info['p']}")
-    best_group, best_score = simulated_annealing()  # 执行模拟退火算法
-    print("Best group:", best_group)
-    print("Best QCID score:", best_score)
+# 计算QCID值的函数
+def calculate_qcid(grouping, q_n, alpha_n, B):
+    q_n_prime = np.array([q_n[i] for i in grouping])  # 当前分组中的q_n值
+    alpha_n_prime = np.array([alpha_n[i] for i in grouping])  # 当前分组中的alpha_n值
+    numerator = np.sum(np.outer(q_n_prime, q_n_prime) * np.dot(alpha_n_prime, alpha_n_prime.T))
+    denominator = np.sum(q_n_prime) ** 2
+    qcid = numerator / denominator - 1 / B
+    return qcid
+
+# 检查约束条件的函数
+def check_constraints(grouping, q_n, pM, d, prune_ratios):
+    q_n_prime = np.array([q_n[i] for i in grouping])
+    prune_ratios_prime = np.array([prune_ratios[i] for i in grouping])
+    data_size = np.sum(q_n_prime)
+    return all(prune_ratios_prime < pM) and data_size >= d**4
+
+# 模拟退火算法的主体
+def simulated_annealing(client_info, num_iterations, cooling_rate, pM, d, B):
+    num_clients = len(client_info)
+    q_n = np.array([client['train_data_len'] for client in client_info])
+    alpha_n = np.array([client['data_dis'] for client in client_info])
+    prune_ratios = np.array([client['prune_ratio'] for client in client_info])
+    
+    current_T = 1.0
+    # 随机生成初始分组,只在剪枝率满足小于PM的条件下生成
+    best_grouping = random.sample([i for i in range(num_clients) if prune_ratios[i] <= pM], random.randint(1, num_clients))
+    best_qcid = calculate_qcid(best_grouping, q_n, alpha_n, B)
+    best_prune_ratios = prune_ratios[best_grouping]
+    
+    for _ in range(num_iterations):
+        # 随机选择一个操作：增加、减少或保持不变
+        operation = random.choice(['add', 'remove'])
+        current_grouping = list(best_grouping)  # 从当前最佳分组开始
+        
+        if operation == 'add' and len(current_grouping) < num_clients:
+            # 添加一个客户端,只添加满足剪枝率满足小于PM的客户端
+            candidates = [c for c in range(num_clients) if c not in current_grouping and prune_ratios[c] <= pM]
+            if candidates:
+                client_to_add = random.choice(candidates)
+                current_grouping.append(client_to_add)
+        elif operation == 'remove' and current_grouping:
+            # 移除一个客户端
+            client_to_remove = random.choice(current_grouping)
+            current_grouping.remove(client_to_remove)
+        
+        # 检查新的分组是否满足约束条件
+        if check_constraints(current_grouping, q_n, pM, d, prune_ratios):
+            current_qcid = calculate_qcid(current_grouping, q_n, alpha_n, B)
+            if current_qcid < best_qcid:
+                best_grouping = current_grouping
+                best_qcid = current_qcid
+                best_prune_ratios = prune_ratios[best_grouping]
+            else:
+                delta_qcid = current_qcid - best_qcid
+                if random.random() < np.exp(-delta_qcid / current_T):
+                    best_grouping = current_grouping
+                    best_prune_ratios = prune_ratios[best_grouping]
+        
+        current_T *= cooling_rate  # 降温
+    
+    return best_grouping, best_qcid, best_prune_ratios
+
+# 定义公共接口
+__all__ = ['generate_client_info', 'calculate_qcid', 'check_constraints', 'simulated_annealing']
+
+# 外部调用示例
+if __name__ == "__main__":
+    # 外部调用时传入真实的客户端信息，测试用
+    num_clients = 20  # 客户端数量
+    B = 4  # 类别标签的数量
+    max_data_len = 150  # 训练数据长度的最大值
+    max_train_time = 200  # 训练时间的最大值
+    max_prune_ratio = 0.9  # 剪枝率的最大值
+    
+    pM = 0.5  # 客户端组M的剪枝率上限
+    d = 10  # 客户端组M的数据集样本数量下限
+    num_iterations = 10000 # 算法迭代次数
+    cooling_rate = 0.99 # 降温速度
+
+     # 生成随机的客户端信息
+    client_info = generate_client_info(num_clients, B, max_data_len, max_train_time, max_prune_ratio)
+    
+    # 打印生成的客户端信息
+    for client in client_info:
+        print(client)
+
+    # 运行模拟退火算法
+    best_grouping, min_qcid, best_prune_ratios = simulated_annealing(client_info, num_iterations=10000, cooling_rate=0.99, pM=3, d=10, B=4)
+    print(f"Best grouping: {best_grouping}")
+    print(f"Minimum QCID: {min_qcid}")
+    print(f"Prune ratios of best grouping: {best_prune_ratios}")

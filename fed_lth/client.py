@@ -56,25 +56,27 @@ def send_file(sock, filename):
 
 # 接收数据函数     
 # sock:接收方socket
-def recv_data(conn):
-  # 接收数据大小
-  size_data = conn.recv(4)
-  if not size_data:
-    return None
-  data_size = struct.unpack('>I', size_data)[0]
+def recv_data(sock, expect_msg_type=None):
+  data=sock.recv(4)
+  msg_len = struct.unpack(">I", data)[0]
+  msg = sock.recv(msg_len, socket.MSG_WAITALL)
+  msg = pickle.loads(msg)
 
-  # 接收数据内容
-  data = b""
-  while len(data) < data_size:
-    packet = conn.recv(4096)
-    if not packet:
-      break
-    data += packet
+  if (expect_msg_type is not None) and (msg[0] != expect_msg_type):
+    #print(msg)
+    raise Exception("Expected " + expect_msg_type + " but received " + msg[0])
+  return msg
 
-  return pickle.loads(data)
-
-
-
+# 发送数据函数     
+# sock:接收方socket
+def send_data(client_socket, data):
+    # 序列化数据
+    data_bytes = pickle.dumps(data)
+    # 发送数据大小
+    data_size = len(data_bytes)
+    client_socket.sendall(struct.pack('>I', data_size))
+    # 发送数据内容
+    client_socket.sendall(data_bytes)
 
 
 
@@ -94,6 +96,7 @@ if __name__ == "__main__":
 
   #开始客户端分组
   op=recv_data(client)
+  print(op)
   if op=='group':
     #第一步 测量本地训练时间
     train_time=local_model.time_test()
@@ -103,13 +106,18 @@ if __name__ == "__main__":
       'train_data_len':local_model.train_len, 
       'train_time':train_time, 
       'prune_ratio':0 }
-    client.sendall(pickle.dumps(client_info))
+    send_data(client,client_info)
     #第三步 接收服务器下发的时间阈值，本地随机剪枝测时间
     train_time_T=recv_data(client)
     # 在prune_ratio函数中测出客户端在该时间阈值下的剪枝率
     prune_ratio=local_model.prune_ratio(train_time_T)
     # 上传该剪枝率
-    client.sendall(pickle.dumps([client_id,prune_ratio]))
+    send_data(client,[client_id,prune_ratio])
+    print('group finish')
+    data=recv_data(client)
+    print('prune')
+  if op=='prune':
+    pass
     
 
 

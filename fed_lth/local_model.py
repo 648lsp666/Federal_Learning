@@ -13,11 +13,13 @@ import torch_pruning as tp
 from pruning_utils import MySlimmingImportance,MySlimmingPruner
 import torch.nn as nn
 import torch.optim as optim
+import os
 
 class Local_model(object):
   def __init__(self, id):
     self.id=id
-    self.model=None  #默认为none 等待服务器下发模型
+    # 从服务器接收到的模型
+    self.model=torch.load(os.path.join(conf['temp_path'],f'client{id}_init_model'))  
     # 本地数据集的loader
     self.train_data,self.test_data, self.train_dis,_=get_dataset(id)
     self.train_len=sum(self.train_dis)
