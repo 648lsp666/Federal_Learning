@@ -1,5 +1,6 @@
 # 控制全局模型 
 
+import math
 import torch 
 import numpy as np
 from torchvision import datasets, transforms
@@ -28,6 +29,8 @@ class Global_model(object):
     self.global_epoch = conf['global_epoch']
     self.node_num = conf['num_client']  #可以声明对象时按实际需求设置
     self.sub_epoch = conf['local_epoch']
+    self.start_ratio = conf['start_ratio'] #初始剪枝率
+    self.ratio = self.start_ratio
 
     self.load_pretrained()
 
@@ -45,14 +48,9 @@ class Global_model(object):
     #check_sparsity(self.model, conv1=False)
 
 
-  # 掩码结构化重组@mk,注意：调用前应当是orig+mask参数字典，调用后返回依旧为orig+mask参数字典，请手动remove_prune
-  def regroup(self):
-    mask_weight = self.model.state_dict()  # Keep Current unstructure pruning
-    #loading_weight = extract_main_weight(self.model.state_dict(), fc=True, conv1=True)
-    remove_prune(self.model, conv1=True)  # remove mask and prune permanently
-    #print('after remove prune:')
-    #print(self.model.state_dict().keys())
-
+  # 掩码结构化重组
+  # 未剪枝模型--(mask_weight结构化重组)->剪枝模型
+  def regroup(self,mask_weight):
     current_mask = extract_mask(mask_weight)
     for key in current_mask:
       mask = current_mask[key]
@@ -62,6 +60,7 @@ class Global_model(object):
     prune_model_custom(self.model, current_mask)
     # prune_random_betweeness(model, current_mask, int(args.num_paths), downsample=downsample, conv1=args.conv1)
     #check_sparsity(self.model, conv1=args.conv1)
+    return current_mask
 
   # 载入预训练模型(彩票)
   def load_pretrained(self):
@@ -102,16 +101,27 @@ class Global_model(object):
       w_avg[key] = torch.div(w_avg[key], len(w))
     return w_avg
 
-if __name__=='__main__':
-  global_model=Global_model()
-  test_rate = 0.2
-  for i in range(3):
-    global_model.u_prune(test_rate)
-    remove_prune(global_model.model, conv1=False) #建议还是remove一下，方便功能拓展
-    check_sparsity(global_model.model, conv1=False)
-    test_rate += 0.2
-  global_model.regroup()
-  remove_prune(global_model.model, conv1=False)
-  check_sparsity(global_model.model, conv1=False)
+  import math
+
+  #降速逼近end_ratio
+  def increase_ratio(self, end_ratio, speed=0.2):
+    delta = end_ratio - self.ratio
+    change = delta * (1 - math.exp(-speed))
+
+    self.ratio += change
+
+  def init_ratio(self):
+    self.ratio = self.start_ratio
+
+
+#if __name__=='__main__':
+#  global_model=Global_model()
+#  test_rate = 0.2
+#  for i in range(3):
+#    global_model.u_prune(test_rate)
+#    check_sparsity(global_model.model, conv1=False)
+#  global_model.regroup()
+#  remove_prune(global_model.model, conv1=False)
+#  check_sparsity(global_model.model, conv1=False)
   # 这里写简单的测试@mk
   # 随便剪枝几次 然后regroup一下 ，函数能跑通就行 我后面再调试@zhy

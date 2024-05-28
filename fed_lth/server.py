@@ -7,6 +7,7 @@ import socket,socketserver
 import time
 from conf import conf
 from global_model import Global_model
+from pruning_utils import *
 import os,struct,pickle
 from chooseclient import simulated_annealing
 import torch
@@ -220,20 +221,27 @@ class Fed_handler(socketserver.BaseRequestHandler):
 	#group_id:客户端组id
 	# prune_step:剪枝间隔轮数
 	def fed_prune(self,groups,prune_step):
+		mask_weight = self.global_model.model.state_dict()
+		self.global_model.init_ratio()
 		while self.global_epoch<= conf['global_epoch']:
 			#训练
 			self.train(groups)
-			if self.global_epoch%prune_step==0:
+			if self.global_epoch % prune_step == 0:
 				#每过几轮触发一次剪枝
-				print('unstruct prune')
-				self.global_model.u_prune(ratio)
-
-				#非结构化剪枝
-
+				print('Unstruct Prune')
+				#非结构化剪枝（可迭代）
+				self.global_model.u_prune(self.global_model.ratio)
+				mask_weight = self.global_model.model.state_dict()
+				remove_prune(self.global_model.model, conv1=True)
 				#如果达到目标剪枝率，跳出循环
-				break
-		# 结构化剪枝重组	
-			
+				self.global_model.increase_ratio(target_ratio)
+				if self.global_model.ratio == target_ratio:
+					print('Reach Target Ratio')
+					break
+		# 结构化剪枝重组
+		print('Structure Prune')
+		mask_weight = self.global_model.regroup(mask_weight)
+		remove_prune(self.global_model.model, conv1=False)
 		#重置模型参数		
 
 		#切换客户端组	
