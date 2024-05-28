@@ -3,22 +3,8 @@ import time,struct,os
 from conf import conf
 from local_model import Local_model
 import pickle
+import torch 
 
-# def get_extension_after_last_dot(my_string):
-#     """
-#     获取字符串中最后一个点之后的字符（扩展名）。
-
-#     Args:
-#         my_string (str): 输入的字符串。
-
-#     Returns:
-#         str: 返回最后一个点之后的字符（扩展名），如果没有找到点则返回空字符串。
-#     """
-#     last_dot_index = my_string.rfind('.')  # 查找最后一个点的索引
-#     if last_dot_index != -1:  # 确保找到了点
-#         return my_string[last_dot_index:]  # 返回点之后的字符2
-#     else:
-#         return ""  # 如果没有找到点，则返回空字符串
 
 # @zhy
 # fedlth项目的客户端模块
@@ -114,12 +100,17 @@ if __name__ == "__main__":
     # 上传该剪枝率
     send_data(client,[client_id,prune_ratio])
     print('group finish')
-    data=recv_data(client)
-    print('prune')
-
+    # 等等待服务器下一步命令
+    op=recv_data(client)
     
-  if op=='prune':
-    pass
+  while op=='train':
+    #本地训练
+    #直接用全局模型覆盖本地模型
+    local_model.model=recv_data(client)
+    #本地训练
+    local_model.local_train(local_model.train_data,conf['local_epoch'])
+    # 上传状态字典
+    send_data(client,local_model.state_dict()) 
     
 
 

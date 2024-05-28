@@ -58,5 +58,6 @@ conf={
     "prune_type" : "lt",
 
     #Global_model设备
-    "global_dev" : 'cuda:0'
+    "global_dev" : 'cuda:0',
+    'device':'cuda'
 }

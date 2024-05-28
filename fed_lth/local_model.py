@@ -25,36 +25,54 @@ class Local_model(object):
     self.train_len=sum(self.train_dis)
     print(self.train_dis)
   
+  def local_train(self,train_data,epoch,lr=0.001):
+    device=conf['device']
+    self.model.train()
+    # 训练
+    # 创建损失函数和优化器
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=0.9)
+
+    # 计算时间
+    start_time = time.time()
+    for e in range(epoch):
+      running_loss = 0.0
+      for i, data in enumerate(train_data, 0):
+          # get the inputs; data is a list of [inputs, labels]
+          inputs, labels = data
+          inputs=inputs.to(device)
+          labels=labels.to(device)
+          # zero the parameter gradients
+          optimizer.zero_grad()
+          # forward + backward + optimize
+          outputs = self.model(inputs)
+          loss = criterion(outputs, labels)
+          loss.backward()
+          optimizer.step()
+          # print statistics
+          running_loss += loss.item()
+          if i % 100 == 99:    # print every 2000 mini-batches
+              print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 100:.3f}')
+              running_loss = 0.0
+      print('Finished Training')
+    end_time = time.time()
+
+    # 计算并打印时间
+    elapsed_time = (end_time - start_time)/epoch
+    final_time = self.train_len*elapsed_time/16
+    print(f'final_time:{final_time}')
+    return final_time
+
+
   # 随机训练测试时间
   def time_test(self):
     # 随机训练测试时间
     inputs = torch.randn(16, 3, 224, 224)  # 16张 224x224 的图片
     labels = torch.randint(0, conf['n_class']-1, (16,))  # 16个标签，范围在0-9之间 10分类任务
     # 测时间 数据集数量/16*time
-    self.model.train()
-    # 训练
-    # 创建损失函数和优化器
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
-
-    # 计算时间
-    start_time = time.time()
-    # 前向传播
-    outputs = self.model(inputs)
-    loss = criterion(outputs, labels)
-
-    # 反向传播和优化
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-
-    end_time = time.time()
-
-    # 计算并打印时间
-    elapsed_time = end_time - start_time
-    final_time = self.train_len*elapsed_time/16
-    print(f'final_time:{final_time}')
-    return final_time
+    data=zip(inputs, labels)
+    time=self.local_train(data,1)
+    return time
 
   def s_prune(self,ratio):
     # 剪枝函数 输入是剪枝率

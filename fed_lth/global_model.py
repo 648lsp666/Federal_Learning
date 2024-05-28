@@ -8,13 +8,14 @@ from utils import *
 from pruning_utils import *
 from pruning_utils import regroup as prune_regroup
 from conf import conf
-
+import torch.nn.utils.prune as prune
 
 class Global_model(object):
   # 初始化的变量在这里面
   def __init__(self) -> None:
     self.device = torch.device(conf['global_dev'])
-    self.model, self.train_loader, self.val_loader, self.test_loader = setup_model_dataset(conf)
+    self.model=torch.load(conf['init_model'])
+    # self.model, self.train_loader, self.val_loader, self.test_loader = setup_model_dataset(conf)
     self.model.to(self.device)
 
     #对于不参与实际训练的服务端，以下是否无需定义？
