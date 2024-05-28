@@ -9,7 +9,7 @@ from conf import conf
 from global_model import Global_model
 import os,struct,pickle
 from chooseclient import simulated_annealing
-
+import torch
 
 # class fed_server(socketserver.ThreadingTCPServer):
 #   def __init__(self):
@@ -63,6 +63,7 @@ class Fed_handler(socketserver.BaseRequestHandler):
 	#剪枝间隔轮数
 	prune_step=5
 	client_update=[]
+	groups=[]
 	
 
 	# 首先执行setup方法，然后执行handle方法，最后执行finish方法
@@ -194,10 +195,14 @@ class Fed_handler(socketserver.BaseRequestHandler):
 		self.stage=='prune'
 		return groups
 		
-
+	# 全局训练函数
 	def train(self,groups):
+		# 选择参与的客户端组
 		parts=[self.clients[i] for i in groups[self.group_id]]
+		#广播训练命令
 		self.broadcast(parts,'data','train')
+		#直接下发模型 覆盖客户端本地模型
+		self.broadcast(parts,'data',self.global_model.model)
 		#接受客户端的更新
 		while self.ready_client<conf['num_client']:
 			self.ready_client+=1
@@ -206,6 +211,7 @@ class Fed_handler(socketserver.BaseRequestHandler):
 		#接收到全部更新,开始聚合
 		self.global_model.aggregate(self.client_update)
 		self.global_epoch+=1
+		torch.save(self.global_model,os.path.join(conf['temp_path'],f'global{self.global_epoch}_model'))
 			
 
 
@@ -213,11 +219,15 @@ class Fed_handler(socketserver.BaseRequestHandler):
 	#LTH迭代剪枝过程
 	#group_id:客户端组id
 	# prune_step:剪枝间隔轮数
-	def prune(self,group_id,prune_step):
+	def fed_prune(self,groups,prune_step):
 		while self.global_epoch<= conf['global_epoch']:
-			self.train(group_id)
+			#训练
+			self.train(groups)
 			if self.global_epoch%prune_step==0:
 				#每过几轮触发一次剪枝
+				print('unstruct prune')
+				self.global_model.u_prune(ratio)
+
 				#非结构化剪枝
 
 				#如果达到目标剪枝率，跳出循环
@@ -228,8 +238,7 @@ class Fed_handler(socketserver.BaseRequestHandler):
 
 		#切换客户端组	
 		self.group_id+=1
-		if self.group_id>10:
-			# 最多分10组
+		if self.group_id==len(self.groups):
 			# 剪枝结束，开始微调训练
 			self.stage='train'
 				
@@ -242,9 +251,9 @@ class Fed_handler(socketserver.BaseRequestHandler):
 		while True:
 			if self.stage=='group':
 				#客户端分组阶段
-				groups=self.client_group()
+				self.client_group()
 			if self.stage=='prune':
-				self.prune()
+				self.fed_prune(5)
 			
 
 
