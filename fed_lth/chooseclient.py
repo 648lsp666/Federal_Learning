@@ -3,20 +3,20 @@ import random
 
 # client_info随机生成，测试用
 def generate_client_info(num_clients, B, max_data_len, max_train_time, max_prune_ratio):
-    client_info = []
+    client_info = {}
     for i in range(num_clients):
         data_dis = np.random.dirichlet(np.ones(B), size=1)[0].tolist()  # 生成一个随机的数据分布，和为1
         train_data_len = random.randint(1, max_data_len)  # 随机生成训练数据长度
         train_time = random.randint(1, max_train_time)  # 随机生成训练时间
         prune_ratio = round(random.uniform(0, max_prune_ratio), 2)  # 随机生成剪枝率，保留两位小数
         
-        client_info.append({
+        client_info[i]={
             'id': i,
             'data_dis': data_dis,
             'train_data_len': train_data_len,
             'train_time': train_time,
             'prune_ratio': prune_ratio
-        })
+        }
     return client_info
 
 # 计算QCID值的函数
@@ -38,9 +38,9 @@ def check_constraints(grouping, q_n, pM, d, prune_ratios):
 # 模拟退火算法的主体
 def simulated_annealing(client_info, num_iterations, cooling_rate, pM, d, B):
     num_clients = len(client_info)
-    q_n = np.array([client['train_data_len'] for client in client_info])
-    alpha_n = np.array([client['data_dis'] for client in client_info])
-    prune_ratios = np.array([client['prune_ratio'] for client in client_info])
+    q_n = np.array([client_info[id]['train_data_len'] for id in client_info])
+    alpha_n = np.array([client_info[id]['data_dis'] for id in client_info])
+    prune_ratios = np.array([client_info[id]['prune_ratio'] for id in client_info])
     
     current_T = 1.0
     # 随机生成初始分组,只在剪枝率满足小于PM的条件下生成
