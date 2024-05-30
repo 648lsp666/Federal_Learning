@@ -11,6 +11,7 @@ from pruning_utils import *
 import os,struct,pickle
 from chooseclient import simulated_annealing
 import torch
+import random
 
 # class fed_server(socketserver.ThreadingTCPServer):
 #   def __init__(self):
@@ -58,7 +59,7 @@ class Fed_handler(socketserver.BaseRequestHandler):
 	client_loss=[]
 	#FL服务器当前的阶段，初始化为'conn'与客户端建立连接；‘group’:客户端分组；‘prune’:训练剪枝；‘train’：剪枝完成；‘finish’训练完成
 	stage='conn'
-	client_info_list=[]
+	client_info=dict()
 	#初始客户端组的id
 	group_id=0
 	#剪枝间隔轮数
@@ -158,18 +159,18 @@ class Fed_handler(socketserver.BaseRequestHandler):
 	def client_group(self):
 		while self.ready_client<conf['num_client']:
 			#第一步 接收客户端训练时间等信息
-			# client_info=
-	# {'data_dis':list,数据分布
-	#                    'train_data_len':number, 训练集大小
-	#                    'train_time':number, 训练时间
-	#                    'prune_ratio':number 剪枝率，默认是0}
+			# info= {'id':客户端id
+			# 'data_dis':list,数据分布
+			# 'train_data_len':number, 训练集大小
+			# 'train_time':number, 训练时间
+			# 'prune_ratio':number 剪枝率，默认是0}
 			data=self.recv_data()
-			self.client_info_list.append(data)
+			self.client_info[data['id']]=data
 			self.ready_client += 1
 		#接收到所有客户端数据，计数重新归零
 		self.ready_client=0
 		# 将平均值作为训练时间阈值
-		time_list=[info['train_time']for info in self.client_info_list]
+		time_list=[self.client_info[id]['train_time']for id in self.client_info]
 		avgtime=sum(time_list)/len(time_list)
 		#广播时间阈值
 		self.broadcast(self.clients,'data',avgtime)
@@ -178,13 +179,11 @@ class Fed_handler(socketserver.BaseRequestHandler):
 			self.ready_client+=1
 			data=self.recv_data()
 			#data[0]客户端id; data[1] 剪枝率
-			for info in self.client_info_list:
-				if info['id']==data[0]:
-					info['prune_ratio']=data[1]
+			self.client_info[data[0]]['prune_ratio']=data[1]
 		# 全部接收到消息，计数重置
 		self.ready_client=0
 		#设置剪枝率
-		prune_ratio=[info['prune_ratio']for info in self.client_info_list]
+		prune_ratio=[info['prune_ratio']for k,info in self.client_info] 
 		# avgtime=sum(time_list)/len(time_list)
 		print(prune_ratio)
 		self.broadcast(self.clients,'data',prune_ratio)
@@ -197,13 +196,12 @@ class Fed_handler(socketserver.BaseRequestHandler):
 		return groups
 		
 	# 全局训练函数
-	def train(self,groups):
-		# 选择参与的客户端组
-		parts=[self.clients[i] for i in groups[self.group_id]]
+	def train(self,clients):
+
 		#广播训练命令
-		self.broadcast(parts,'data','train')
+		self.broadcast(clients,'data','train')
 		#直接下发模型 覆盖客户端本地模型
-		self.broadcast(parts,'data',self.global_model.model)
+		self.broadcast(clients,'data',self.global_model.model)
 		#接受客户端的更新
 		while self.ready_client<conf['num_client']:
 			self.ready_client+=1
@@ -225,7 +223,11 @@ class Fed_handler(socketserver.BaseRequestHandler):
 		self.global_model.init_ratio()
 		while self.global_epoch<= conf['global_epoch']:
 			#训练
-			self.train(groups)
+			# 选择参与的客户端组
+			group=[self.clients[i] for i in groups[self.group_id]]
+			#确定目标剪枝率/
+			# target_ratio=max([self.client_info[id]])
+			self.train(group)
 			if self.global_epoch % prune_step == 0:
 				#每过几轮触发一次剪枝
 				print('Unstruct Prune')
@@ -248,8 +250,13 @@ class Fed_handler(socketserver.BaseRequestHandler):
 		self.group_id+=1
 		if self.group_id==len(self.groups):
 			# 剪枝结束，开始微调训练
-			self.stage='train'
-				
+			self.stage='tune'
+
+	def tune(self):
+		gruop=random.sample(self.clients , 10)
+		self.train(gruop)
+
+			
 
 	#服务器总处理响应函数，通过self.stage确定当前的执行流程
 	def handle(self):
@@ -262,6 +269,9 @@ class Fed_handler(socketserver.BaseRequestHandler):
 				self.client_group()
 			if self.stage=='prune':
 				self.fed_prune(5)
+			if self.stage=='tune':
+				self.tune()
+
 			
 
 
