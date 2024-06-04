@@ -68,10 +68,10 @@ class Global_model(object):
 
   # 载入预训练模型(彩票)
   def load_pretrained(self):
-    initalization = torch.load(conf['pretrained'], map_location=self.device)
+    initalization = torch.load(conf['pretrained'], map_location=torch.device('cuda:'+conf['global_dev']))
     if 'init_weight' in initalization.keys():
       print('loading from init_weight')
-      initalization = initalization['init_weight']
+      initalization = initalizagtion['init_weight']
     elif 'state_dict' in initalization.keys():
       print('loading from state_dict')
       initalization = initalization['state_dict']
