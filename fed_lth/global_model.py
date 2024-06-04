@@ -14,7 +14,7 @@ import torch.nn.utils.prune as prune
 class Global_model(object):
   # 初始化的变量在这里面
   def __init__(self) -> None:
-    torch.cuda.set_device(int(conf['global_dev']))
+    torch.cuda.set_device(conf['global_dev'])
     #self.device = torch.device(conf['device'])
     self.model, self.train_loader, self.val_loader, self.test_loader = setup_model_dataset(conf)
     #self.model = torch.load(conf['init_model'])
@@ -71,7 +71,7 @@ class Global_model(object):
     initalization = torch.load(conf['pretrained'], map_location=torch.device('cuda:'+conf['global_dev']))
     if 'init_weight' in initalization.keys():
       print('loading from init_weight')
-      initalization = initalizagtion['init_weight']
+      initalization = initalization['init_weight']
     elif 'state_dict' in initalization.keys():
       print('loading from state_dict')
       initalization = initalization['state_dict']
