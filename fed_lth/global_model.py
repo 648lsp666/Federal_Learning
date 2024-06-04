@@ -15,19 +15,18 @@ class Global_model(object):
   # 初始化的变量在这里面
   def __init__(self) -> None:
     torch.cuda.set_device(int(conf['global_dev']))
-    self.device = torch.device(conf['device'])
-    self.model.send
-    self.model = torch.load(conf['init_model'])
-    # self.model, self.train_loader, self.val_loader, self.test_loader = setup_model_dataset(conf)
-    self.model.to(self.device)
+    #self.device = torch.device(conf['device'])
+    self.model, self.train_loader, self.val_loader, self.test_loader = setup_model_dataset(conf)
+    #self.model = torch.load(conf['init_model'])
+    self.model.cuda()
 
-    #对于不参与实际训练的服务端，以下是否无需定义？
     self.decreasing_lr = list(map(int, conf['decreasing_lr'].split(',')))
     self.optimizer = torch.optim.SGD(self.model.parameters(), conf['lr'], momentum=conf['momentum'],
                                      weight_decay=conf['weight_decay'])
     self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=self.decreasing_lr, gamma=0.1)
 
     print(self.model.normalize)
+
     self.global_epoch = conf['global_epoch']
     self.node_num = conf['num_client']  #可以声明对象时按实际需求设置
     self.sub_epoch = conf['local_epoch']
@@ -41,7 +40,7 @@ class Global_model(object):
     self.model.load_state_dict(self.average_weights(local_weights))
 
   # 每一轮FL非结构剪枝,输入剪枝率@mk,由于中途需要remove_prune,此剪枝率应递增
-  def u_prune(self,ratio):
+  def u_prune(self, ratio):
     #unstructure prune
     #print('before unstructure prune:')
     #print(self.model.state_dict().keys())
@@ -49,11 +48,10 @@ class Global_model(object):
     pruning_model(self.model, ratio, conv1=True)  #全局非结构化剪枝
     #check_sparsity(self.model, conv1=False)
 
-
   # 掩码结构化重组
   # 未剪枝模型--(mask_weight结构化重组)->剪枝模型
-  def regroup(self,mask_weight):
-    current_mask = extract_mask(mask_weight)
+  def regroup(self, weight_with_mask):
+    current_mask = extract_mask(weight_with_mask)
     for key in current_mask:
       mask = current_mask[key]
       shape = current_mask[key].shape
@@ -63,6 +61,10 @@ class Global_model(object):
     # prune_random_betweeness(model, current_mask, int(args.num_paths), downsample=downsample, conv1=args.conv1)
     #check_sparsity(self.model, conv1=args.conv1)
     return current_mask
+
+  def refill(self, weight_with_mask):
+    current_mask = extract_mask(weight_with_mask)
+    prune_model_custom_fillback(self.model, current_mask, criteria='remain', train_loader=self.train_loader)
 
   # 载入预训练模型(彩票)
   def load_pretrained(self):
@@ -118,7 +120,7 @@ class Global_model(object):
 
 if __name__=='__main__':
   global_model=Global_model()
-  mask_weight = global_model.model.state_dict()
+  weight_with_mask = global_model.model.state_dict()
   global_model.init_ratio()
 
   target_ratio = 0.8
@@ -128,7 +130,7 @@ if __name__=='__main__':
       print(f'Unstruct Prune[{struct_prune_time}][{unstruct_prune_time}], Prune Ratio: {global_model.ratio}')
       # 非结构化剪枝（可迭代）
       global_model.u_prune(global_model.ratio)
-      mask_weight = global_model.model.state_dict()
+      weight_with_mask = global_model.model.state_dict()
       remove_prune(global_model.model, conv1=True)
       # 如果达到目标剪枝率，跳出循环
       if global_model.ratio == target_ratio:
@@ -137,7 +139,8 @@ if __name__=='__main__':
       global_model.increase_ratio(target_ratio)
 
     print(f'Struct Prune[{struct_prune_time}]')
-    mask_weight = global_model.regroup(mask_weight)
+    #mask_weight = global_model.regroup(weight_with_mask)
+    global_model.refill(weight_with_mask)
     remove_prune(global_model.model, conv1=False)
     check_sparsity(global_model.model, conv1=False)
   # 这里写简单的测试@mk
