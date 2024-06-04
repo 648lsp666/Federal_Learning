@@ -14,8 +14,10 @@ import torch.nn.utils.prune as prune
 class Global_model(object):
   # 初始化的变量在这里面
   def __init__(self) -> None:
-    self.device = torch.device(conf['global_dev'])
-    self.model=torch.load(conf['init_model'])
+    torch.cuda.set_device(int(conf['global_dev']))
+    self.device = torch.device(conf['device'])
+    self.model.send
+    self.model = torch.load(conf['init_model'])
     # self.model, self.train_loader, self.val_loader, self.test_loader = setup_model_dataset(conf)
     self.model.to(self.device)
 
@@ -114,14 +116,29 @@ class Global_model(object):
     self.ratio = self.start_ratio
 
 
-#if __name__=='__main__':
-#  global_model=Global_model()
-#  test_rate = 0.2
-#  for i in range(3):
-#    global_model.u_prune(test_rate)
-#    check_sparsity(global_model.model, conv1=False)
-#  global_model.regroup()
-#  remove_prune(global_model.model, conv1=False)
-#  check_sparsity(global_model.model, conv1=False)
+if __name__=='__main__':
+  global_model=Global_model()
+  mask_weight = global_model.model.state_dict()
+  global_model.init_ratio()
+
+  target_ratio = 0.8
+
+  for struct_prune_time in range(2):
+    for unstruct_prune_time in range(3):
+      print(f'Unstruct Prune[{struct_prune_time}][{unstruct_prune_time}], Prune Ratio: {global_model.ratio}')
+      # 非结构化剪枝（可迭代）
+      global_model.u_prune(global_model.ratio)
+      mask_weight = global_model.model.state_dict()
+      remove_prune(global_model.model, conv1=True)
+      # 如果达到目标剪枝率，跳出循环
+      if global_model.ratio == target_ratio:
+        print('Reach Target Ratio')
+        break
+      global_model.increase_ratio(target_ratio)
+
+    print(f'Struct Prune[{struct_prune_time}]')
+    mask_weight = global_model.regroup(mask_weight)
+    remove_prune(global_model.model, conv1=False)
+    check_sparsity(global_model.model, conv1=False)
   # 这里写简单的测试@mk
   # 随便剪枝几次 然后regroup一下 ，函数能跑通就行 我后面再调试@zhy

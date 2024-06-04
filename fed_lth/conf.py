@@ -18,7 +18,7 @@ conf={
     "use_sparse_conv" : False,
 
     #初始模型的文件路径：
-    # "pretrained" : "resnet18_cifar10_lt_0.2_s1_rewind_16/1checkpoint.pth.tar",
+    "pretrained" : "pretrained/1checkpoint.pth.tar",
     "init_model":'models\init_resnet18.pt',
     # 临时文件路径 存放训练过程发送/接收的数据
     "temp_path":"temp",
@@ -56,6 +56,7 @@ conf={
 	"lambda" : 1,
 
     "prune_type" : "lt",
+    "start_ratio" : 0.1,
 
     #Global_model设备
     "global_dev" : 'cuda:0',
