@@ -22,8 +22,8 @@ class Global_model(object):
     self.val_loader=get_dataset(-1)
 
     self.decreasing_lr = list(map(int, conf['decreasing_lr'].split(',')))
-    self.optimizer = torch.optim.SGD(self.model.parameters(), conf['lr'], momentum=conf['momentum'],
-                                     weight_decay=conf['weight_decay'])
+    self.optimizer = torch.optim.SGD(self.model.parameters(), float(conf['lr']), momentum=conf['momentum'],
+                                     weight_decay=float(conf['weight_decay']))
     self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=self.decreasing_lr, gamma=0.1)
 
     print(self.model.normalize)
@@ -34,7 +34,8 @@ class Global_model(object):
     self.start_ratio = conf['start_ratio'] #初始剪枝率
     self.ratio = self.start_ratio
 
-    self.load_pretrained()
+    self.init_weight = self.model.state_dict()
+    #self.load_pretrained()
 
   #聚合函数.local_weights应当是包含多个model.state_dict()的列表
   def aggregate(self,local_weights):
@@ -65,11 +66,13 @@ class Global_model(object):
 
   def refill(self, weight_with_mask):
     current_mask = extract_mask(weight_with_mask)
-    prune_model_custom_fillback(self.model, current_mask, criteria='remain', train_loader=self.val_loader)
+
+    # 先用train_loader=self.val_loader 把代码跑通
+    prune_model_custom_fillback(self.model, current_mask, criteria='remain', train_loader=self.val_loader,trained_weight=self.model.state_dict(),init_weight=self.init_weight)
 
   # 载入预训练模型(彩票)
   def load_pretrained(self):
-    initalization = torch.load(conf['pretrained'], map_location=self.device)
+    initalization = torch.load(conf['pretrained'], map_location=torch.device(conf['global_dev']))
     if 'init_weight' in initalization.keys():
       print('loading from init_weight')
       initalization = initalization['init_weight']

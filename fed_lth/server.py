@@ -5,6 +5,8 @@
 # 非阻塞模块
 import socket,socketserver
 import time
+
+import global_model
 from conf import conf
 from global_model import Global_model
 from pruning_utils import *
@@ -188,9 +190,11 @@ class Fed_handler(socketserver.BaseRequestHandler):
 	#group_id:客户端组id
 	# prune_step:剪枝间隔轮数
 	def fed_prune(self,groups,prune_step):
-		mask_weight = self.global_model.model.state_dict()
+		weight_with_mask = self.global_model.model.state_dict()
 		self.global_model.init_ratio()
-		while self.group_id< len(groups):
+		#测试用例Target_ratio
+		target_ratio = 0.8
+		while self.global_epoch<= conf['global_epoch']:
 			#训练
 			# 选择参与的客户端组
 			group=[self.clients[i] for i in groups[self.group_id]]
@@ -199,20 +203,21 @@ class Fed_handler(socketserver.BaseRequestHandler):
 			self.train(group)
 			if self.global_epoch % prune_step == 0:
 				#每过几轮触发一次剪枝
-				print('Unstruct Prune')
-				#非结构化剪枝（可迭代）
-				# self.global_model.u_prune(self.global_model.ratio)
-				# mask_weight = self.global_model.model.state_dict()
-				# remove_prune(self.global_model.model, conv1=True)
-				#如果达到目标剪枝率，跳出循环
-				# self.global_model.increase_ratio(target_ratio)
-				# if self.global_model.ratio == target_ratio:
-				# 	print('Reach Target Ratio')
-				# 	break
+				print(f'Unstruct Prune, Prune Ratio: {self.global_model.ratio}')
+				# 非结构化剪枝（可迭代）
+				self.global_model.u_prune(self.global_model.ratio)
+				weight_with_mask = self.global_model.model.state_dict()
+				remove_prune(self.global_model.model, conv1=True)
+				# 如果达到目标剪枝率，跳出循环
+				if self.global_model.ratio == target_ratio:
+					print('Reach Target Ratio')
+					break
 		# 结构化剪枝重组
 		print('Structure Prune')
-		# mask_weight = self.global_model.regroup(mask_weight)
-		# remove_prune(self.global_model.model, conv1=False)
+		#mask_weight = self.global_model.regroup(weight_with_mask)
+		self.global_model.refill(weight_with_mask)
+		remove_prune(self.global_model.model, conv1=False)
+		check_sparsity(self.global_model.model, conv1=False)
 		#重置模型参数		
 		
 		#切换客户端组	
