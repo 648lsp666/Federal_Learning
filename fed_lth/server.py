@@ -205,9 +205,9 @@ class Fed_handler(socketserver.BaseRequestHandler):
 				#每过几轮触发一次剪枝
 				print(f'Unstruct Prune, Prune Ratio: {self.global_model.ratio}')
 				# 非结构化剪枝（可迭代）
-				self.global_model.u_prune(self.global_model.ratio)
-				weight_with_mask = self.global_model.model.state_dict()
-				remove_prune(self.global_model.model, conv1=True)
+				# self.global_model.u_prune(self.global_model.ratio)
+				# weight_with_mask = self.global_model.model.state_dict()
+				# remove_prune(self.global_model.model, conv1=True)
 				# 如果达到目标剪枝率，跳出循环
 				if self.global_model.ratio == target_ratio:
 					print('Reach Target Ratio')
@@ -215,9 +215,9 @@ class Fed_handler(socketserver.BaseRequestHandler):
 		# 结构化剪枝重组
 		print('Structure Prune')
 		#mask_weight = self.global_model.regroup(weight_with_mask)
-		self.global_model.refill(weight_with_mask)
-		remove_prune(self.global_model.model, conv1=False)
-		check_sparsity(self.global_model.model, conv1=False)
+		# self.global_model.refill(weight_with_mask)
+		# remove_prune(self.global_model.model, conv1=False)
+		# check_sparsity(self.global_model.model, conv1=False)
 		#重置模型参数		
 		
 		#切换客户端组	

@@ -1,32 +1,31 @@
 # 控制全局模型 
-
+import copy
 import math
 import torch 
 import numpy as np
 from torchvision import datasets, transforms
 
-from utils import *
+# from utils import *
 from pruning_utils import *
 from pruning_utils import regroup as prune_regroup
 from conf import conf
 import torch.nn.utils.prune as prune
+from dataset import get_dataset
 
 class Global_model(object):
   # 初始化的变量在这里面
   def __init__(self) -> None:
-    torch.cuda.set_device(int(conf['global_dev']))
+    # torch.cuda.set_device(int(conf['global_dev']))
     self.device = torch.device(conf['device'])
     # self.model, self.train_loader, self.val_loader, self.test_loader = setup_model_dataset(conf)
     self.model = torch.load(conf['init_model'])
-    self.model.cuda()
+    self.model.to(self.device)
     self.val_loader=get_dataset(-1)
 
     self.decreasing_lr = list(map(int, conf['decreasing_lr'].split(',')))
     self.optimizer = torch.optim.SGD(self.model.parameters(), float(conf['lr']), momentum=conf['momentum'],
                                      weight_decay=float(conf['weight_decay']))
     self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=self.decreasing_lr, gamma=0.1)
-
-    print(self.model.normalize)
 
     self.global_epoch = conf['global_epoch']
     self.node_num = conf['num_client']  #可以声明对象时按实际需求设置

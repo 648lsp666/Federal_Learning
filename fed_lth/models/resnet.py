@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from advertorch.utils import NormalizeByChannelMeanStd
 from torchvision.models.utils import load_state_dict_from_url
 
 from .conv import SparseConv2D
@@ -151,11 +150,6 @@ class ResNet(nn.Module):
         self.groups = groups
         self.base_width = width_per_group
 
-        # cifar10
-        print('normalize setting is default for CIFAR10')
-        self.normalize = NormalizeByChannelMeanStd(
-            mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616])
-
         if True:
             self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
             self.bn1 = norm_layer(self.inplanes)
@@ -226,9 +220,6 @@ class ResNet(nn.Module):
 
     def _forward_impl(self, x):
 
-        # See note [TorchScript super()]
-        x = self.normalize(x)
-
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -271,9 +262,6 @@ class ResNet2(nn.Module):
         self.base_width = width_per_group
 
         # cifar10
-        print('normalize setting is default for CIFAR10')
-        self.normalize = NormalizeByChannelMeanStd(
-            mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616])
 
         if not imagenet:
             self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
@@ -347,7 +335,6 @@ class ResNet2(nn.Module):
     def _forward_impl(self, x):
 
         # See note [TorchScript super()]
-        x = self.normalize(x)
 
         x = self.conv1(x)
         x = self.bn1(x)
@@ -389,11 +376,6 @@ class ResNet3(nn.Module):
                             "or a 3-element tuple, got {}".format(replace_stride_with_dilation))
         self.groups = groups
         self.base_width = width_per_group
-
-        # cifar10
-        print('normalize setting is default for CIFAR10')
-        self.normalize = NormalizeByChannelMeanStd(
-            mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616])
 
         if not imagenet:
             self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
@@ -467,7 +449,6 @@ class ResNet3(nn.Module):
     def _forward_impl(self, x):
 
         # See note [TorchScript super()]
-        x = self.normalize(x)
 
         x = self.conv1(x)
         x = self.bn1(x)
@@ -510,10 +491,6 @@ class ResNet4(nn.Module):
         self.groups = groups
         self.base_width = width_per_group
 
-        # cifar10
-        print('normalize setting is default for CIFAR10')
-        self.normalize = NormalizeByChannelMeanStd(
-            mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616])
 
         if not imagenet:
             self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
@@ -587,7 +564,6 @@ class ResNet4(nn.Module):
     def _forward_impl(self, x):
 
         # See note [TorchScript super()]
-        x = self.normalize(x)
 
         x = self.conv1(x)
         x = self.bn1(x)
@@ -628,11 +604,6 @@ class ResNet5(nn.Module):
                             "or a 3-element tuple, got {}".format(replace_stride_with_dilation))
         self.groups = groups
         self.base_width = width_per_group
-
-        # cifar10
-        print('normalize setting is default for CIFAR10')
-        self.normalize = NormalizeByChannelMeanStd(
-            mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616])
 
         if not imagenet:
             self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
@@ -705,9 +676,6 @@ class ResNet5(nn.Module):
 
     def _forward_impl(self, x):
 
-        # See note [TorchScript super()]
-        x = self.normalize(x)
-
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -757,11 +725,6 @@ class ResNet6(nn.Module):
                             "or a 3-element tuple, got {}".format(replace_stride_with_dilation))
         self.groups = groups
         self.base_width = width_per_group
-
-        # cifar10
-        print('normalize setting is default for CIFAR10')
-        self.normalize = NormalizeByChannelMeanStd(
-            mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616])
 
         if not imagenet:
             self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
@@ -833,9 +796,6 @@ class ResNet6(nn.Module):
         return nn.Sequential(*layers)
 
     def _forward_impl(self, x):
-
-        # See note [TorchScript super()]
-        x = self.normalize(x)
 
         x = self.conv1(x)
         x = self.bn1(x)
@@ -1016,11 +976,6 @@ class ResNet50_2(ResNet):
         self.groups = groups
         self.base_width = width_per_group
 
-        # cifar10
-        print('normalize setting is default for CIFAR10')
-        self.normalize = NormalizeByChannelMeanStd(
-            mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616])
-
         if not imagenet:
             self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
             self.bn1 = norm_layer(self.inplanes)
@@ -1084,11 +1039,6 @@ class ResNet50_3(ResNet):
                             "or a 3-element tuple, got {}".format(replace_stride_with_dilation))
         self.groups = groups
         self.base_width = width_per_group
-
-        # cifar10
-        print('normalize setting is default for CIFAR10')
-        self.normalize = NormalizeByChannelMeanStd(
-            mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616])
 
         if not imagenet:
             self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
@@ -1154,11 +1104,6 @@ class ResNet50_4(ResNet):
         self.groups = groups
         self.base_width = width_per_group
 
-        # cifar10
-        print('normalize setting is default for CIFAR10')
-        self.normalize = NormalizeByChannelMeanStd(
-            mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616])
-
         if not imagenet:
             self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
             self.bn1 = norm_layer(self.inplanes)
@@ -1223,11 +1168,6 @@ class ResNet50_5(ResNet):
         self.groups = groups
         self.base_width = width_per_group
 
-        # cifar10
-        print('normalize setting is default for CIFAR10')
-        self.normalize = NormalizeByChannelMeanStd(
-            mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616])
-
         if not imagenet:
             self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
             self.bn1 = norm_layer(self.inplanes)
@@ -1291,11 +1231,6 @@ class ResNet50_6(ResNet):
                             "or a 3-element tuple, got {}".format(replace_stride_with_dilation))
         self.groups = groups
         self.base_width = width_per_group
-
-        # cifar10
-        print('normalize setting is default for CIFAR10')
-        self.normalize = NormalizeByChannelMeanStd(
-            mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616])
 
         if not imagenet:
             self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)

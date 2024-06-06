@@ -1,135 +1,136 @@
+# 暂时没用
+
 import copy 
 import torch
 import numpy as np
 from torchvision.models import mobilenet
-from models.resnet import resnet18, resnet50, resnet152, resnext101_32x8d, wide_resnet50_2, resnext50_32x4d, resnet18_2, resnet18_3, resnet18_4, resnet18_5, resnet18_6, resnet50_2, resnet50_3, resnet50_4, resnet50_5, resnet50_6
+# from models.resnet import resnet18, resnet50, resnet152, resnext101_32x8d, wide_resnet50_2, resnext50_32x4d, resnet18_2, resnet18_3, resnet18_4, resnet18_5, resnet18_6, resnet50_2, resnet50_3, resnet50_4, resnet50_5, resnet50_6
 from models.resnets import resnet20, resnet56
 from models.densenet import densenet161
 from models.shufflenet import shufflenet_v2_x1_0
 from models.resnets_2fc import resnet20 as resnet20_2fc
 from models.mobilenet import MobileNet, MobileNet1, MobileNet2, MobileNet4, MobileNet3, MobileNet5
 from models.resnet12 import resnet12
-from advertorch.utils import NormalizeByChannelMeanStd
 from dataset import *
 from models.vgg import vgg16_bn
 from models.resnet_grasp import resnet32 as wrn32
 
-def setup_model_dataset(config):
-    trigger_set_dataloader = None
-    if config['dataset_name'] == 'cifar10':
-        classes = 10
-        train_number = 45000
-        normalization = NormalizeByChannelMeanStd(
-            mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616])
-        train_set_loader, val_loader, test_loader = cifar10_dataloaders(batch_size= config['batch_size'], data_dir =config['dataset_dir'])
+# def setup_model_dataset(config):
+#     trigger_set_dataloader = None
+#     if config['dataset_name'] == 'cifar10':
+#         classes = 10
+#         train_number = 45000
+#         normalization = NormalizeByChannelMeanStd(
+#             mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616])
+#         train_set_loader, val_loader, test_loader = cifar10_dataloaders(batch_size= config['batch_size'], data_dir =config['dataset_dir'])
     
-    elif config['dataset_name'] == 'cifar10_trigger':
-        classes = 10
-        train_number = 45000
-        normalization = NormalizeByChannelMeanStd(
-            mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616])
-        train_set_loader, val_loader, test_loader, trigger_set_dataloader = cifar10_with_trigger_dataloaders(batch_size= config['batch_size'], data_dir =config['dataset_dir'])
+#     elif config['dataset_name'] == 'cifar10_trigger':
+#         classes = 10
+#         train_number = 45000
+#         normalization = NormalizeByChannelMeanStd(
+#             mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616])
+#         train_set_loader, val_loader, test_loader, trigger_set_dataloader = cifar10_with_trigger_dataloaders(batch_size= config['batch_size'], data_dir =config['dataset_dir'])
 
-    elif config['dataset_name'] == 'cifar100_trigger':
-        classes = 100
-        train_number = 45000
-        normalization = NormalizeByChannelMeanStd(
-            mean=[0.5071, 0.4866, 0.4409], std=[0.2673, 0.2564, 0.2762])
-        train_set_loader, val_loader, test_loader, trigger_set_dataloader = cifar100_with_trigger_dataloaders(batch_size= config['batch_size'], data_dir =config['dataset_dir'])
+#     elif config['dataset_name'] == 'cifar100_trigger':
+#         classes = 100
+#         train_number = 45000
+#         normalization = NormalizeByChannelMeanStd(
+#             mean=[0.5071, 0.4866, 0.4409], std=[0.2673, 0.2564, 0.2762])
+#         train_set_loader, val_loader, test_loader, trigger_set_dataloader = cifar100_with_trigger_dataloaders(batch_size= config['batch_size'], data_dir =config['dataset_dir'])
 
-    elif config['dataset_name'] == 'cifar100':
-        classes = 100
-        train_number = 45000
-        normalization = NormalizeByChannelMeanStd(
-            mean=[0.5071, 0.4866, 0.4409], std=[0.2673, 0.2564, 0.2762])
-        train_set_loader, val_loader, test_loader = cifar100_dataloaders(batch_size= config['batch_size'], data_dir =config['dataset_dir'])
+#     elif config['dataset_name'] == 'cifar100':
+#         classes = 100
+#         train_number = 45000
+#         normalization = NormalizeByChannelMeanStd(
+#             mean=[0.5071, 0.4866, 0.4409], std=[0.2673, 0.2564, 0.2762])
+#         train_set_loader, val_loader, test_loader = cifar100_dataloaders(batch_size= config['batch_size'], data_dir =config['dataset_dir'])
 
-    elif config['dataset_name'] == 'tiny-imagenet':
-        classes = 200
-        train_number = 90000
-        normalization = NormalizeByChannelMeanStd(
-            mean=[0.4802, 0.4481, 0.3975], std=[0.2302, 0.2265, 0.2262])
-        train_set_loader, val_loader, test_loader = tiny_imagenet_dataloaders(batch_size= config['batch_size'], data_dir =config['dataset_dir'])
-    else:
-        raise ValueError('unknow dataset')
+#     elif config['dataset_name'] == 'tiny-imagenet':
+#         classes = 200
+#         train_number = 90000
+#         normalization = NormalizeByChannelMeanStd(
+#             mean=[0.4802, 0.4481, 0.3975], std=[0.2302, 0.2265, 0.2262])
+#         train_set_loader, val_loader, test_loader = tiny_imagenet_dataloaders(batch_size= config['batch_size'], data_dir =config['dataset_dir'])
+#     else:
+#         raise ValueError('unknow dataset')
 
-    if config['arch_name'] == 'res18':
-        print('build model resnet18')
-        model = resnet18(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet', use_sparse_conv=config['use_sparse_conv'])
-    elif config['arch_name'] == 'res18_2':
-        print('build model resnet18-2')
-        model = resnet18_2(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
-    elif config['arch_name'] == 'res18_3':
-        print('build model resnet18-3')
-        model = resnet18_3(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
-    elif config['arch_name'] == 'res18_4':
-        print('build model resnet18-4')
-        model = resnet18_4(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
-    elif config['arch_name'] == 'res18_5':
-        print('build model resnet18-5')
-        model = resnet18_5(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
-    elif config['arch_name'] == 'res18_6':
-        print('build model resnet18-6')
-        model = resnet18_6(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
-    elif config['arch_name'] == 'res50':
-        print('build model resnet50')
-        model = resnet50(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet', use_sparse_conv=config['use_sparse_conv'])
-    elif config['arch_name'] == 'res50_2':
-        print('build model resnet50-2')
-        model = resnet50_2(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
-    elif config['arch_name'] == 'res50_3':
-        print('build model resnet50-3')
-        model = resnet50_3(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
-    elif config['arch_name'] == 'res50_4':
-        print('build model resnet50-4')
-        model = resnet50_4(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
-    elif config['arch_name'] == 'res50_5':
-        print('build model resnet50-5')
-        model = resnet50_5(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
-    elif config['arch_name'] == 'res50_6':
-        print('build model resnet50-6')
-        model = resnet50_6(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
-    elif config['arch_name'] == 'res20s':
-        print('build model: resnet20')
-        model = resnet20(number_class=classes)
-    elif config['arch_name'] == 'res56s':
-        print('build model: resnet56')
-        model = resnet56(number_class=classes)
-    elif config['arch_name'] == 'vgg16_bn':
-        print('build model: vgg16_bn')
-        model = vgg16_bn(num_classes=classes, use_sparse_conv=config['use_sparse_conv'])
-    elif config['arch_name'] == 'mobilenet':
-        print('build model: mobilenet')
-        model = MobileNet(num_classes=classes)
-    elif config['arch_name'] == 'mobilenet1':
-        print('build model: mobilenet1')
-        model = MobileNet1(num_classes=classes)
-    elif config['arch_name'] == 'mobilenet2':
-        print('build model: mobilenet2')
-        model = MobileNet2(num_classes=classes)
-    elif config['arch_name'] == 'mobilenet3':
-        print('build model: mobilenet3')
-        model = MobileNet3(num_classes=classes)
-    elif config['arch_name'] == 'mobilenet4':
-        print('build model: mobilenet4')
-        model = MobileNet4(num_classes=classes)
-    elif config['arch_name'] == 'mobilenet5':
-        print('build model: mobilenet5')
-        model = MobileNet5(num_classes=classes)
-    elif config['arch_name'] == 'resnet12':
-        print('build model: resnet12')
-        model = resnet12(num_classes=classes)
-    elif config['arch_name'] == 'wrn32':
-        model = wrn32(dataset=config['dataset_name'])
+#     if config['arch_name'] == 'res18':
+#         print('build model resnet18')
+#         model = resnet18(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet', use_sparse_conv=config['use_sparse_conv'])
+#     elif config['arch_name'] == 'res18_2':
+#         print('build model resnet18-2')
+#         model = resnet18_2(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
+#     elif config['arch_name'] == 'res18_3':
+#         print('build model resnet18-3')
+#         model = resnet18_3(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
+#     elif config['arch_name'] == 'res18_4':
+#         print('build model resnet18-4')
+#         model = resnet18_4(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
+#     elif config['arch_name'] == 'res18_5':
+#         print('build model resnet18-5')
+#         model = resnet18_5(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
+#     elif config['arch_name'] == 'res18_6':
+#         print('build model resnet18-6')
+#         model = resnet18_6(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
+#     elif config['arch_name'] == 'res50':
+#         print('build model resnet50')
+#         model = resnet50(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet', use_sparse_conv=config['use_sparse_conv'])
+#     elif config['arch_name'] == 'res50_2':
+#         print('build model resnet50-2')
+#         model = resnet50_2(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
+#     elif config['arch_name'] == 'res50_3':
+#         print('build model resnet50-3')
+#         model = resnet50_3(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
+#     elif config['arch_name'] == 'res50_4':
+#         print('build model resnet50-4')
+#         model = resnet50_4(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
+#     elif config['arch_name'] == 'res50_5':
+#         print('build model resnet50-5')
+#         model = resnet50_5(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
+#     elif config['arch_name'] == 'res50_6':
+#         print('build model resnet50-6')
+#         model = resnet50_6(num_classes=classes, imagenet=config['dataset_name'] == 'tiny-imagenet')
+#     elif config['arch_name'] == 'res20s':
+#         print('build model: resnet20')
+#         model = resnet20(number_class=classes)
+#     elif config['arch_name'] == 'res56s':
+#         print('build model: resnet56')
+#         model = resnet56(number_class=classes)
+#     elif config['arch_name'] == 'vgg16_bn':
+#         print('build model: vgg16_bn')
+#         model = vgg16_bn(num_classes=classes, use_sparse_conv=config['use_sparse_conv'])
+#     elif config['arch_name'] == 'mobilenet':
+#         print('build model: mobilenet')
+#         model = MobileNet(num_classes=classes)
+#     elif config['arch_name'] == 'mobilenet1':
+#         print('build model: mobilenet1')
+#         model = MobileNet1(num_classes=classes)
+#     elif config['arch_name'] == 'mobilenet2':
+#         print('build model: mobilenet2')
+#         model = MobileNet2(num_classes=classes)
+#     elif config['arch_name'] == 'mobilenet3':
+#         print('build model: mobilenet3')
+#         model = MobileNet3(num_classes=classes)
+#     elif config['arch_name'] == 'mobilenet4':
+#         print('build model: mobilenet4')
+#         model = MobileNet4(num_classes=classes)
+#     elif config['arch_name'] == 'mobilenet5':
+#         print('build model: mobilenet5')
+#         model = MobileNet5(num_classes=classes)
+#     elif config['arch_name'] == 'resnet12':
+#         print('build model: resnet12')
+#         model = resnet12(num_classes=classes)
+#     elif config['arch_name'] == 'wrn32':
+#         model = wrn32(dataset=config['dataset_name'])
 
-    else:
-        raise ValueError('unknow model')
+#     else:
+#         raise ValueError('unknow model')
 
-    model.normalize = normalization
-    if not trigger_set_dataloader is None:
-        return model, train_set_loader, val_loader, test_loader, trigger_set_dataloader
-    else:
-        return model, train_set_loader, val_loader, test_loader
+#     model.normalize = normalization
+#     if not trigger_set_dataloader is None:
+#         return model, train_set_loader, val_loader, test_loader, trigger_set_dataloader
+#     else:
+#         return model, train_set_loader, val_loader, test_loader
 
 
 def cvt_state_dict(state_dict, adv_simclr, bn_idx=0):

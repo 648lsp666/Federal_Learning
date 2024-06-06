@@ -23,6 +23,7 @@ class Local_model(object):
     # 本地数据集的loader
     self.train_data,self.test_data, self.train_dis,_=get_dataset(id)
     self.train_len=sum(self.train_dis)
+    self.train_dis=[i/self.train_len for i in self.train_dis]
     print(self.train_dis)
   
   def local_train(self,train_data,epoch,lr=0.001):
