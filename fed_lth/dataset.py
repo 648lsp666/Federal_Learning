@@ -52,8 +52,9 @@ def get_dataset(id):
         print('Wrong dataset name')
     #id -1是服务器 直接返回测试集用来测试全局模型的精度
     if id==-1:
+        train_loader=torch.utils.data.DataLoader(train_dataset, batch_size=conf["batch_size"])
         eval_loader=torch.utils.data.DataLoader(eval_dataset, batch_size=conf["batch_size"])
-        return eval_loader
+        return train_loader,eval_loader
 
     if conf['iid']==True:
         # 按客户端id划分数据集 随机抽取样本（iid）
