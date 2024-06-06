@@ -15,10 +15,11 @@ class Global_model(object):
   # 初始化的变量在这里面
   def __init__(self) -> None:
     torch.cuda.set_device(int(conf['global_dev']))
-    #self.device = torch.device(conf['device'])
-    self.model, self.train_loader, self.val_loader, self.test_loader = setup_model_dataset(conf)
-    #self.model = torch.load(conf['init_model'])
+    self.device = torch.device(conf['device'])
+    # self.model, self.train_loader, self.val_loader, self.test_loader = setup_model_dataset(conf)
+    self.model = torch.load(conf['init_model'])
     self.model.cuda()
+    self.val_loader=get_dataset(-1)
 
     self.decreasing_lr = list(map(int, conf['decreasing_lr'].split(',')))
     self.optimizer = torch.optim.SGD(self.model.parameters(), conf['lr'], momentum=conf['momentum'],
@@ -64,7 +65,7 @@ class Global_model(object):
 
   def refill(self, weight_with_mask):
     current_mask = extract_mask(weight_with_mask)
-    prune_model_custom_fillback(self.model, current_mask, criteria='remain', train_loader=self.train_loader)
+    prune_model_custom_fillback(self.model, current_mask, criteria='remain', train_loader=self.val_loader)
 
   # 载入预训练模型(彩票)
   def load_pretrained(self):

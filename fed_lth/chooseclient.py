@@ -10,7 +10,7 @@ def generate_client_info(num_clients, B, max_data_len, max_train_time, max_prune
         train_time = random.randint(1, max_train_time)  # 随机生成训练时间
         prune_ratio = round(random.uniform(0, max_prune_ratio), 2)  # 随机生成剪枝率，保留两位小数
         
-        client_info[i]={
+        client_info[i] = {
             'id': i,
             'data_dis': data_dis,
             'train_data_len': train_data_len,
@@ -18,6 +18,11 @@ def generate_client_info(num_clients, B, max_data_len, max_train_time, max_prune
             'prune_ratio': prune_ratio
         }
     return client_info
+
+# 筛选符合条件的客户端
+def filter_clients_by_prune_ratio(client_info, pM, remaining_clients):
+    filtered_client_info = {k: v for k, v in client_info.items() if k in remaining_clients and v['prune_ratio'] <= pM}
+    return filtered_client_info
 
 # 计算QCID值的函数
 def calculate_qcid(grouping, q_n, alpha_n, B):
@@ -29,84 +34,100 @@ def calculate_qcid(grouping, q_n, alpha_n, B):
     return qcid
 
 # 检查约束条件的函数
-def check_constraints(grouping, q_n, pM, d, prune_ratios):
-    q_n_prime = np.array([q_n[i] for i in grouping])
+def check_constraints(grouping, prune_ratios, pM, group_size):
     prune_ratios_prime = np.array([prune_ratios[i] for i in grouping])
-    data_size = np.sum(q_n_prime)
-    return all(prune_ratios_prime < pM) and data_size >= d**4
+    return all(prune_ratios_prime < pM) and len(grouping) == group_size
 
 # 模拟退火算法的主体
-def simulated_annealing(client_info, num_iterations, cooling_rate, pM, d, B):
-    num_clients = len(client_info)
-    q_n = np.array([client_info[id]['train_data_len'] for id in client_info])
-    alpha_n = np.array([client_info[id]['data_dis'] for id in client_info])
-    prune_ratios = np.array([client_info[id]['prune_ratio'] for id in client_info])
+def simulated_annealing(client_info, remaining_clients, num_iterations, cooling_rate, pM, B, group_size):
+    client_indices = list(client_info.keys())
+    q_n = np.array([client_info[i]['train_data_len'] for i in client_indices])
+    alpha_n = np.array([client_info[i]['data_dis'] for i in client_indices])
+    prune_ratios = np.array([client_info[i]['prune_ratio'] for i in client_indices])
     
     current_T = 1.0
-    # 随机生成初始分组,只在剪枝率满足小于PM的条件下生成
-    best_grouping = random.sample([i for i in range(num_clients) if prune_ratios[i] <= pM], random.randint(1, num_clients))
-    best_qcid = calculate_qcid(best_grouping, q_n, alpha_n, B)
-    best_prune_ratios = prune_ratios[best_grouping]
+    best_grouping = random.sample(remaining_clients, min(group_size, len(remaining_clients)))
+    while not check_constraints([client_indices.index(i) for i in best_grouping], prune_ratios, pM, group_size):
+        best_grouping = random.sample(remaining_clients, min(group_size, len(remaining_clients)))
+    
+    best_qcid = calculate_qcid([client_indices.index(i) for i in best_grouping], q_n, alpha_n, B)
     
     for _ in range(num_iterations):
-        # 随机选择一个操作：增加、减少或保持不变
         operation = random.choice(['add', 'remove'])
-        current_grouping = list(best_grouping)  # 从当前最佳分组开始
+        current_grouping = list(best_grouping)
         
-        if operation == 'add' and len(current_grouping) < num_clients:
-            # 添加一个客户端,只添加满足剪枝率满足小于PM的客户端
-            candidates = [c for c in range(num_clients) if c not in current_grouping and prune_ratios[c] <= pM]
+        if operation == 'add' and len(current_grouping) < group_size:
+            candidates = [c for c in remaining_clients if c not in current_grouping]
             if candidates:
                 client_to_add = random.choice(candidates)
                 current_grouping.append(client_to_add)
-        elif operation == 'remove' and current_grouping:
-            # 移除一个客户端
+        elif operation == 'remove' and len(current_grouping) > group_size:
             client_to_remove = random.choice(current_grouping)
             current_grouping.remove(client_to_remove)
         
-        # 检查新的分组是否满足约束条件
-        if check_constraints(current_grouping, q_n, pM, d, prune_ratios):
-            current_qcid = calculate_qcid(current_grouping, q_n, alpha_n, B)
+        if check_constraints([client_indices.index(i) for i in current_grouping], prune_ratios, pM, group_size):
+            current_qcid = calculate_qcid([client_indices.index(i) for i in current_grouping], q_n, alpha_n, B)
             if current_qcid < best_qcid:
                 best_grouping = current_grouping
                 best_qcid = current_qcid
-                best_prune_ratios = prune_ratios[best_grouping]
             else:
                 delta_qcid = current_qcid - best_qcid
                 if random.random() < np.exp(-delta_qcid / current_T):
                     best_grouping = current_grouping
-                    best_prune_ratios = prune_ratios[best_grouping]
         
-        current_T *= cooling_rate  # 降温
+        current_T *= cooling_rate
     
-    return best_grouping, best_qcid, best_prune_ratios
+    return best_grouping, best_qcid
+
+# 运行多次模拟退火算法，直到所有客户端都被分组
+def multi_group_simulated_annealing(client_info, num_iterations, cooling_rate, initial_pM, delta_pM, B, group_size):
+    all_groupings = []
+    remaining_clients = list(client_info.keys())
+    pM = initial_pM
+    
+    while remaining_clients:
+        if len(remaining_clients) < group_size:  # 如果剩余客户数量小于group_size, 自成一组
+            all_groupings.append(remaining_clients)
+            break
+        
+        filtered_client_info = filter_clients_by_prune_ratio(client_info, pM, remaining_clients)
+        if not filtered_client_info:  # 如果没有符合条件的客户端，增加 pM 值
+            pM += delta_pM
+            continue
+        
+        best_grouping, best_qcid = simulated_annealing(filtered_client_info, list(filtered_client_info.keys()), num_iterations, cooling_rate, pM, B, group_size)
+        if not best_grouping:  # 如果没有找到有效的分组，增加 pM 值
+            pM += delta_pM
+            continue
+        
+        all_groupings.append(best_grouping)
+        remaining_clients = [c for c in remaining_clients if c not in best_grouping]
+        pM += delta_pM  # 增加 pM 值
+    
+    return all_groupings
 
 # 定义公共接口
-__all__ = ['generate_client_info', 'calculate_qcid', 'check_constraints', 'simulated_annealing']
+__all__ = ['generate_client_info', 'filter_clients_by_prune_ratio', 'calculate_qcid', 'check_constraints', 'simulated_annealing', 'multi_group_simulated_annealing']
 
 # 外部调用示例
 if __name__ == "__main__":
-    # 外部调用时传入真实的客户端信息，测试用
-    num_clients = 20  # 客户端数量
-    B = 4  # 类别标签的数量
-    max_data_len = 150  # 训练数据长度的最大值
-    max_train_time = 200  # 训练时间的最大值
-    max_prune_ratio = 0.9  # 剪枝率的最大值
+    num_clients = 100
+    group_size = int(num_clients * 0.1)
+    B = 4
+    max_data_len = 150
+    max_train_time = 200
+    max_prune_ratio = 0.9
     
-    pM = 0.5  # 客户端组M的剪枝率上限
-    d = 10  # 客户端组M的数据集样本数量下限
-    num_iterations = 10000 # 算法迭代次数
-    cooling_rate = 0.99 # 降温速度
-
-     # 生成随机的客户端信息
+    initial_pM = 0.3
+    delta_pM = 0.1
+    num_iterations = 10000
+    cooling_rate = 0.99
+    
     client_info = generate_client_info(num_clients, B, max_data_len, max_train_time, max_prune_ratio)
     
     # 打印生成的客户端信息
-    for client in client_info:
+    for client in client_info.values():
         print(client)
 
-    # 运行模拟退火算法
-    best_grouping, min_qcid, best_prune_ratios = simulated_annealing(client_info, num_iterations=10000, cooling_rate=0.99, pM=3, d=10, B=4)
-    print(f"Best grouping: {best_grouping}")
-    print(f"Minimum QCID: {min_qcid}")
-    print(f"Prune ratios of best grouping: {best_prune_ratios}")
+    all_groupings = multi_group_simulated_annealing(client_info, num_iterations, cooling_rate, initial_pM, delta_pM, B, group_size)
+    print(f"All groupings: {all_groupings}")

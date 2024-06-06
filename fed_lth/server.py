@@ -13,37 +13,6 @@ from chooseclient import simulated_annealing
 import torch
 import random
 
-# class fed_server(socketserver.ThreadingTCPServer):
-#   def __init__(self):
-#     # 按照配置中的模型信息获取模型，这里使用的是torchvision的models模块内置的ResNet-18模型
-#     # 模型下载后，令其作为全局初始模型
-#     self.global_model = models.get_model(conf["model_name"]) 
-#     # 生成一个测试集合加载器
-#     # shuffle=True打乱数据集
-#     # self.eval_loader = torch.utils.data.DataLoader(eval_dataset, batch_size=self.conf["batch_size"], shuffle=True)
-#     #当前连接的客户端
-#     self.clients=[]
-#     # 就绪的客户端数目
-#     self.ready_client=0
-#     # 全局联邦训练周期
-#     self.global_epoch=0
-#     #全局模型效果
-#     self.client_acc=[]
-#     self.client_loss=[]
-#     #FL服务器当前的阶段，初始化为'conn'与客户端建立连接；‘group’:客户端分组；‘prune’:训练剪枝；‘train’：剪枝完成；‘finish’训练完成
-#     self.stage='conn'
-
-  # def conn_clients(self,request):
-  #   #记录客户端列表
-  #   self.clients.append(request)
-  #   print(f'客户端{len(self.clients)}已连接:{request}')
-  #   if len(self.clients)== conf['num_client']:
-  #     #所有客户端已经连接
-  #     print(f'All clients connected! Clients:{len(self.clients)}')
-  #     #所有客户端就绪
-  #     self.ready_client=len(self.clients)   
-
-
 
 # 定义消息处理类
 class Fed_handler(socketserver.BaseRequestHandler):
@@ -144,7 +113,7 @@ class Fed_handler(socketserver.BaseRequestHandler):
 		#添加到客户端列表
 		self.clients.append(self.request)
 		print(f'客户端{len(self.clients)}已连接:{self.request}')
-		#向该客户端发送id和初始模型,客户端id从0编号，len-1
+		#向该客户端发送id和初始模型,客户端id从0编号
 		self.request.sendall(struct.pack('>I',len(self.clients)-1))#发送id
 		self.send_file(self.request,conf['init_model'])#发送初始模型
 
@@ -188,12 +157,11 @@ class Fed_handler(socketserver.BaseRequestHandler):
 		print(prune_ratio)
 		self.broadcast(self.clients,'data',prune_ratio)
 		# 开始模拟退火分组
-		# groups,_,_=simulated_annealing() 
+		# self.groups=simulated_annealing() 
 		
-		groups=[[0]]#测试用
+		self.groups=[[0]]#测试用
 		#分组完成
 		self.stage=='prune'
-		return groups
 		
 	# 全局训练函数
 	def train(self,clients):
@@ -208,6 +176,7 @@ class Fed_handler(socketserver.BaseRequestHandler):
 			data=self.recv_data()
 			self.client_update.append(data)
 		#接收到全部更新,开始聚合
+		self.ready_client=0
 		self.global_model.aggregate(self.client_update)
 		self.global_epoch+=1
 		torch.save(self.global_model,os.path.join(conf['temp_path'],f'global{self.global_epoch}_model'))
@@ -221,31 +190,31 @@ class Fed_handler(socketserver.BaseRequestHandler):
 	def fed_prune(self,groups,prune_step):
 		mask_weight = self.global_model.model.state_dict()
 		self.global_model.init_ratio()
-		while self.global_epoch<= conf['global_epoch']:
+		while self.group_id< len(groups):
 			#训练
 			# 选择参与的客户端组
 			group=[self.clients[i] for i in groups[self.group_id]]
-			#确定目标剪枝率/
-			# target_ratio=max([self.client_info[id]])
+			#确定目标剪枝率
+			# target_ratio=max([self.client_info[id] for id in groups[self.group_id]])
 			self.train(group)
 			if self.global_epoch % prune_step == 0:
 				#每过几轮触发一次剪枝
 				print('Unstruct Prune')
 				#非结构化剪枝（可迭代）
-				self.global_model.u_prune(self.global_model.ratio)
-				mask_weight = self.global_model.model.state_dict()
-				remove_prune(self.global_model.model, conv1=True)
+				# self.global_model.u_prune(self.global_model.ratio)
+				# mask_weight = self.global_model.model.state_dict()
+				# remove_prune(self.global_model.model, conv1=True)
 				#如果达到目标剪枝率，跳出循环
-				self.global_model.increase_ratio(target_ratio)
-				if self.global_model.ratio == target_ratio:
-					print('Reach Target Ratio')
-					break
+				# self.global_model.increase_ratio(target_ratio)
+				# if self.global_model.ratio == target_ratio:
+				# 	print('Reach Target Ratio')
+				# 	break
 		# 结构化剪枝重组
 		print('Structure Prune')
-		mask_weight = self.global_model.regroup(mask_weight)
-		remove_prune(self.global_model.model, conv1=False)
+		# mask_weight = self.global_model.regroup(mask_weight)
+		# remove_prune(self.global_model.model, conv1=False)
 		#重置模型参数		
-
+		
 		#切换客户端组	
 		self.group_id+=1
 		if self.group_id==len(self.groups):
@@ -253,9 +222,15 @@ class Fed_handler(socketserver.BaseRequestHandler):
 			self.stage='tune'
 
 	def tune(self):
-		gruop=random.sample(self.clients , 10)
-		self.train(gruop)
+		while self.global_epoch<conf['global_epoch']:
+			gruop=random.sample(self.groups , 1)
+			self.train(gruop)
+			self.global_epoch+=1
+		self.stage=='finish'
 
+	#fl训练完成 评估
+	def eval():
+		pass
 			
 
 	#服务器总处理响应函数，通过self.stage确定当前的执行流程
@@ -271,6 +246,8 @@ class Fed_handler(socketserver.BaseRequestHandler):
 				self.fed_prune(5)
 			if self.stage=='tune':
 				self.tune()
+			if self.stage=='finish':
+				self.eval()
 
 			
 

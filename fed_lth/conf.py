@@ -23,12 +23,18 @@ conf={
     # 临时文件路径 存放训练过程发送/接收的数据
     "temp_path":"temp",
     #总客户端数量
-    "num_client" : 1,
+    "num_client" : 2,
 	
+    # 是否iid
+    'iid':False,
 
     #noniid设置： 暂未使用
-    'n_class':10,
-    'nsamples':20,
+    # 每个客户端类别数量
+    'n_class':2,
+    # 每类别数量
+    'nsamples':200,
+    # 分割后每个客户端的数据集数量是 n_class* nsamples
+    # 不平衡度
     'rate_unbalance':1.0,
 	
     #全局迭代次数：即服务端和客户端的通信次数
@@ -36,13 +42,13 @@ conf={
 	"global_epoch" : 10,
 	
     #本地模型的迭代次数：即每一个客户端在进行本地模型训练时的迭代次数
-	"local_epoch" : 1,
+	"local_epoch" : 2,
 	
     #每次选取k个客户端参与迭代
-	"k" : 1,
+	"k" : 2,
 	
     #本地模型进行训练时的参数-每个batch的大小
-	"batch_size" : 32,
+	"batch_size" : 64,
 	
     #本地模型进行训练时的参数-学习率
 	"lr" : 0.01,

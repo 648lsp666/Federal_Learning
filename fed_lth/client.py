@@ -72,7 +72,7 @@ if __name__ == "__main__":
   client = socket.socket()
   # 连接主机
   client.connect((conf['ip'],conf['port']))
-  #接收服务器分配的客户端id
+  #接收服务器分配的客户端id,id从0开始编号
   client_id=struct.unpack('>I', client.recv(4))[0]
   #接收初始模型
   recv_file(client, os.path.join(conf['temp_path'],f'client{client_id}_init_model'))
