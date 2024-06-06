@@ -20,7 +20,7 @@ class Global_model(object):
     # self.model, self.train_loader, self.val_loader, self.test_loader = setup_model_dataset(conf)
     self.model = torch.load(conf['init_model'])
     self.model.to(self.device)
-    self.val_loader=get_dataset(-1)
+    self.train_loader,self.val_loader=get_dataset(-1)
 
     self.decreasing_lr = list(map(int, conf['decreasing_lr'].split(',')))
     self.optimizer = torch.optim.SGD(self.model.parameters(), float(conf['lr']), momentum=conf['momentum'],
