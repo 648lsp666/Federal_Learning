@@ -108,10 +108,11 @@ if __name__ == "__main__":
     # 上传该剪枝率
     send_data(client,[client_id,prune_ratio])
     print('group finish')
-    op=recv_data(client)
 
+  # 等待服务器下一步命令
+  op=recv_data(client)
   #本地训练
-  if op=='train':
+  while op=='train':
     print('local train')
     #本地训练
     #直接用全局模型覆盖本地模型
@@ -120,6 +121,7 @@ if __name__ == "__main__":
     local_model.local_train(local_model.train_data,conf['local_epoch'])
     # 上传状态字典
     send_data(client,local_model.model.state_dict()) 
+    op=recv_data(client)
 
     
 

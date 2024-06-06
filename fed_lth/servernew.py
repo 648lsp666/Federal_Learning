@@ -81,6 +81,7 @@ def conn():
 
 # 联邦训练函数
 def fed_train(clients,global_model):
+	print(f'global train')
 		#广播训练命令
 	broadcast(clients,'data','train')
 	#直接下发模型 覆盖客户端本地模型
@@ -90,6 +91,7 @@ def fed_train(clients,global_model):
 		data=recv_data(sock)			
 		client_update.append(data)
 	#接收到全部更新,开始聚合
+	print('aggregate')
 	global_model.aggregate(client_update)
 	torch.save(global_model,os.path.join(conf['temp_path'],f'global{global_epoch}_model'))
 
@@ -163,44 +165,42 @@ if __name__=='__main__':
      
 	# 开始联邦剪枝过程
 	print('start fed prune')
-	weight_with_mask = global_model.model.state_dict()
-	global_model.init_ratio()
-	#测试用例Target_ratio
-	target_ratio = 0.8
-	while global_epoch<= conf['global_epoch']:
-		#训练
-		# 选择参与的客户端
-		participants=[clients[i] for i in groups[group_id]]
-		#确定目标剪枝率
-		# target_ratio=max([client_info[id] for id in groups[group_id]])
-		fed_train(participants, global_model)
-		global_epoch +=1
-		if global_epoch % prune_step == 0:
-			#每过几轮触发一次剪枝
-			print(f'Unstruct Prune, Prune Ratio: {global_model.ratio}')
-			# 非结构化剪枝（可迭代）
-			# global_model.u_prune(global_model.ratio)
-			# weight_with_mask = global_model.model.state_dict()
-			# remove_prune(global_model.model, conv1=True)
-			# 如果达到目标剪枝率，跳出循环
-			if global_model.ratio == target_ratio:
-				print('Reach Target Ratio')
-				break
-	# 结构化剪枝重组
-	print('Structure Prune')
-	#mask_weight = global_model.regroup(weight_with_mask)
-	# global_model.refill(weight_with_mask)
-	# remove_prune(global_model.model, conv1=False)
-	# check_sparsity(global_model.model, conv1=False)
-	#重置模型参数		
+	while group_id<=len(groups):
+		weight_with_mask = global_model.model.state_dict()
+		global_model.init_ratio()
+		#测试用例Target_ratio
+		target_ratio = 0.8
+		while global_epoch<= conf['global_epoch']:
+			#训练
+			# 选择参与的客户端
+			participants=[clients[i] for i in groups[group_id]]
+			#确定目标剪枝率
+			# target_ratio=max([client_info[id] for id in groups[group_id]])
+			fed_train(participants, global_model)
+			global_epoch +=1
+			if global_epoch % prune_step == 0:
+				#每过几轮触发一次剪枝
+				print(f'Unstruct Prune, Prune Ratio: {global_model.ratio}')
+				# 非结构化剪枝（可迭代）
+				# global_model.u_prune(global_model.ratio)
+				# weight_with_mask = global_model.model.state_dict()
+				# remove_prune(global_model.model, conv1=True)
+				# 如果达到目标剪枝率，跳出循环
+				if global_model.ratio == target_ratio:
+					print('Reach Target Ratio')
+					break
+		# 结构化剪枝重组
+		print('Structure Prune')
+		#mask_weight = global_model.regroup(weight_with_mask)
+		# global_model.refill(weight_with_mask)
+		# remove_prune(global_model.model, conv1=False)
+		# check_sparsity(global_model.model, conv1=False)
+		#重置模型参数		
 
-	#切换客户端组	
-	group_id+=1
-	if group_id==len(groups):
-		# 剪枝结束，开始微调训练
-		stage='tune'    
-	#组1开始训练
-	fed_train([clients[i] for i in groups[group_id]])
+		#切换客户端组	
+		group_id+=1
+
+	print('fed prune finish')
 
 
   
