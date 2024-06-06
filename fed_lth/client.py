@@ -15,7 +15,7 @@ def recv_file(sock,filename):
   # 接收文件大小
   size_data = sock.recv(4)
   file_size = struct.unpack('>I', size_data)[0]  # 大端序解包文件大小
-
+  print(f'recv file size:{file_size}')
   # 接收文件内容并写入文件
   with open(filename, 'wb') as file:
     while file_size > 0:
@@ -44,6 +44,8 @@ def send_file(sock, filename):
 # sock:接收方socket
 def recv_data(sock, expect_msg_type=None):
   data=sock.recv(4)
+  if not data:
+    return ''
   msg_len = struct.unpack(">I", data)[0]
   msg = sock.recv(msg_len, socket.MSG_WAITALL)
   msg = pickle.loads(msg)
@@ -73,16 +75,21 @@ if __name__ == "__main__":
   # 连接主机
   client.connect((conf['ip'],conf['port']))
   #接收服务器分配的客户端id,id从0开始编号
-  client_id=struct.unpack('>I', client.recv(4))[0]
+  client_id=recv_data(client)
+  print(f'Client id:{client_id}')
   #接收初始模型
-  recv_file(client, os.path.join(conf['temp_path'],f'client{client_id}_init_model'))
+  # recv_file(client, os.path.join(conf['temp_path'],f'client{client_id}_init_model'))
+  model=recv_data(client)
 
   #初始化本地模型
-  local_model=Local_model(client_id)
+  local_model=Local_model(client_id,model)
+
+  # 等等待服务器下一步命令
+  op=recv_data(client)
+  # while op=='':
+  #   op=recv_data(client)
 
   #开始客户端分组
-  op=recv_data(client)
-  print(op)
   if op=='group':
     #第一步 测量本地训练时间
     train_time=local_model.time_test()
@@ -92,6 +99,7 @@ if __name__ == "__main__":
       'train_data_len':local_model.train_len, 
       'train_time':train_time, 
       'prune_ratio':0 }
+    print(client_info)
     send_data(client,client_info)
     #第三步 接收服务器下发的时间阈值，本地随机剪枝测时间
     train_time_T=recv_data(client)
@@ -100,17 +108,19 @@ if __name__ == "__main__":
     # 上传该剪枝率
     send_data(client,[client_id,prune_ratio])
     print('group finish')
-    # 等等待服务器下一步命令
     op=recv_data(client)
-    
-  while op=='train':
+
+  #本地训练
+  if op=='train':
+    print('local train')
     #本地训练
     #直接用全局模型覆盖本地模型
     local_model.model=recv_data(client)
     #本地训练
     local_model.local_train(local_model.train_data,conf['local_epoch'])
     # 上传状态字典
-    send_data(client,local_model.state_dict()) 
+    send_data(client,local_model.model.state_dict()) 
+
     
 
 

@@ -12,6 +12,16 @@ from conf import conf
 import torch.nn.utils.prune as prune
 from dataset import get_dataset
 
+
+  #获取参数平均值
+def average_weights(w):
+  w_avg = copy.deepcopy(w[0])
+  for key in w_avg.keys():
+    for i in range(1, len(w)):
+      w_avg[key] += w[i][key]
+    w_avg[key] = torch.div(w_avg[key], len(w))
+  return w_avg
+
 class Global_model(object):
   # 初始化的变量在这里面
   def __init__(self) -> None:
@@ -38,7 +48,7 @@ class Global_model(object):
 
   #聚合函数.local_weights应当是包含多个model.state_dict()的列表
   def aggregate(self,local_weights):
-    self.model.load_state_dict(self.average_weights(local_weights))
+    self.model.load_state_dict(average_weights(local_weights))
 
   # 每一轮FL非结构剪枝,输入剪枝率@mk,由于中途需要remove_prune,此剪枝率应递增
   def u_prune(self, ratio):
@@ -99,14 +109,7 @@ class Global_model(object):
     #print('*number of model weight={}'.format(len(self.model.state_dict().keys())))
     self.model.load_state_dict(loading_weight)
 
-  #获取参数平均值
-  def average_weights(w):
-    w_avg = copy.deepcopy(w[0])
-    for key in w_avg.keys():
-      for i in range(1, len(w)):
-        w_avg[key] += w[i][key]
-      w_avg[key] = torch.div(w_avg[key], len(w))
-    return w_avg
+
 
   import math
 

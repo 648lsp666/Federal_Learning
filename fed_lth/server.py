@@ -15,14 +15,37 @@ from chooseclient import simulated_annealing
 import torch
 import random
 
+#接收文件函数
+def recv_file(sock):
+	# 接收文件大小
+	size_data = sock.recv(4)
+	file_size = struct.unpack('>I', size_data)[0]  # 大端序解包文件大小
+
+	# 接收文件内容并写入文件
+	with open('received_file', 'wb') as file:
+			while file_size > 0:
+					chunk = sock.recv(min(1024, file_size))
+					file_size -= len(chunk)
+					file.write(chunk)
+	print("File received successfully.")
+
+def recv_data( sock ,expect_msg_type=None):
+	# sock=self.request
+	msg_len = struct.unpack(">I", sock.recv(4))[0]
+	msg = sock.recv(msg_len, socket.MSG_WAITALL)
+	msg = pickle.loads(msg)
+
+	if (expect_msg_type is not None) and (msg[0] != expect_msg_type):
+		#print(msg)
+		raise Exception("Expected " + expect_msg_type + " but received " + msg[0])
+	return msg
+
 
 # 定义消息处理类
 class Fed_handler(socketserver.BaseRequestHandler):
 	global_model=Global_model()
 	#记录当前连接的客户端
 	clients=[]
-	# 就绪的客户端数目
-	ready_client=0
 	# 全局联邦训练周期,从0开始
 	global_epoch=0
 	#全局模型效果
@@ -73,30 +96,7 @@ class Fed_handler(socketserver.BaseRequestHandler):
 					break
 				sock.sendall(chunk)
 		
-	#接收文件函数
-	def recv_file(self,sock):
-		# 接收文件大小
-		size_data = sock.recv(4)
-		file_size = struct.unpack('>I', size_data)[0]  # 大端序解包文件大小
 
-		# 接收文件内容并写入文件
-		with open('received_file', 'wb') as file:
-				while file_size > 0:
-						chunk = sock.recv(min(1024, file_size))
-						file_size -= len(chunk)
-						file.write(chunk)
-		print("File received successfully.")
-
-	def recv_data(self, expect_msg_type=None):
-		sock=self.request
-		msg_len = struct.unpack(">I", sock.recv(4))[0]
-		msg = sock.recv(msg_len, socket.MSG_WAITALL)
-		msg = pickle.loads(msg)
-
-		if (expect_msg_type is not None) and (msg[0] != expect_msg_type):
-			#print(msg)
-			raise Exception("Expected " + expect_msg_type + " but received " + msg[0])
-		return msg
 
 	# 发送数据函数     
 	# sock:接收方socket
@@ -117,8 +117,7 @@ class Fed_handler(socketserver.BaseRequestHandler):
 		print(f'客户端{len(self.clients)}已连接:{self.request}')
 		#向该客户端发送id和初始模型,客户端id从0编号
 		self.request.sendall(struct.pack('>I',len(self.clients)-1))#发送id
-		self.send_file(self.request,conf['init_model'])#发送初始模型
-
+		self.send_data(self.request,self.global_model.model)
 		if len(self.clients)== conf['num_client']:
 			#所有客户端已经连接
 			print(f'All clients connected! Clients:{len(self.clients)}')
@@ -128,57 +127,62 @@ class Fed_handler(socketserver.BaseRequestHandler):
 
 	#客户端分组过程
 	def client_group(self):
-		while self.ready_client<conf['num_client']:
-			#第一步 接收客户端训练时间等信息
-			# info= {'id':客户端id
-			# 'data_dis':list,数据分布
-			# 'train_data_len':number, 训练集大小
-			# 'train_time':number, 训练时间
-			# 'prune_ratio':number 剪枝率，默认是0}
-			data=self.recv_data()
+		#从所有客户端接收数据
+		self.stage='group'
+		for sock in self.clients:
+			data=recv_data(sock)
 			self.client_info[data['id']]=data
-			self.ready_client += 1
+			print(f'recv info client{data["id"]}')
+		# if self.ready_client<conf['num_client']:
+		# 	#第一步 接收客户端训练时间等信息
+		# 	# info= {'id':客户端id
+		# 	# 'data_dis':list,数据分布
+		# 	# 'train_data_len':number, 训练集大小
+		# 	# 'train_time':number, 训练时间
+		# 	# 'prune_ratio':number 剪枝率，默认是0}
+		# 	data=self.recv_data()
+		# 	self.client_info[data['id']]=data
+		# 	self.ready_client += 1
+		# 	print(f'recv info client{data["id"]}')
 		#接收到所有客户端数据，计数重新归零
-		self.ready_client=0
+		print('start group')
 		# 将平均值作为训练时间阈值
 		time_list=[self.client_info[id]['train_time']for id in self.client_info]
 		avgtime=sum(time_list)/len(time_list)
 		#广播时间阈值
 		self.broadcast(self.clients,'data',avgtime)
 		#等待客户端返回剪枝率
-		while self.ready_client<conf['num_client']:
-			self.ready_client+=1
-			data=self.recv_data()
+		for sock in self.clients:
+			data=recv_data(sock)
 			#data[0]客户端id; data[1] 剪枝率
 			self.client_info[data[0]]['prune_ratio']=data[1]
-		# 全部接收到消息，计数重置
-		self.ready_client=0
 		#设置剪枝率
-		prune_ratio=[info['prune_ratio']for k,info in self.client_info] 
-		# avgtime=sum(time_list)/len(time_list)
-		print(prune_ratio)
-		self.broadcast(self.clients,'data',prune_ratio)
+		# prune_ratio=[info['prune_ratio']for k,info in self.client_info] 
+		# # avgtime=sum(time_list)/len(time_list)
+		# print(prune_ratio)
+		# self.broadcast(self.clients,'data',prune_ratio)
 		# 开始模拟退火分组
 		# self.groups=simulated_annealing() 
 		
 		self.groups=[[0]]#测试用
 		#分组完成
 		self.stage=='prune'
+		self.group_id=0
+		print('group finish')
+		#组1开始训练
+		self.train([self.clients[i] for i in self.groups[self.group_id]])
 		
 	# 全局训练函数
 	def train(self,clients):
-
 		#广播训练命令
 		self.broadcast(clients,'data','train')
 		#直接下发模型 覆盖客户端本地模型
 		self.broadcast(clients,'data',self.global_model.model)
 		#接受客户端的更新
-		while self.ready_client<conf['num_client']:
-			self.ready_client+=1
-			data=self.recv_data()
+		for sock in clients:
+			data=recv_data(sock)			
 			self.client_update.append(data)
 		#接收到全部更新,开始聚合
-		self.ready_client=0
 		self.global_model.aggregate(self.client_update)
 		self.global_epoch+=1
 		torch.save(self.global_model,os.path.join(conf['temp_path'],f'global{self.global_epoch}_model'))
@@ -189,7 +193,9 @@ class Fed_handler(socketserver.BaseRequestHandler):
 	#LTH迭代剪枝过程
 	#group_id:客户端组id
 	# prune_step:剪枝间隔轮数
-	def fed_prune(self,groups,prune_step):
+	def fed_prune(self,prune_step):
+		groups=self.groups
+		print('start fed prune')
 		weight_with_mask = self.global_model.model.state_dict()
 		self.global_model.init_ratio()
 		#测试用例Target_ratio
@@ -233,7 +239,7 @@ class Fed_handler(socketserver.BaseRequestHandler):
 			self.global_epoch+=1
 		self.stage=='finish'
 
-	#fl训练完成 评估
+	#全局模型评估
 	def eval():
 		pass
 			
@@ -241,9 +247,9 @@ class Fed_handler(socketserver.BaseRequestHandler):
 	#服务器总处理响应函数，通过self.stage确定当前的执行流程
 	def handle(self):
 		#与客户端建立连接，记录客户端列表
-		if self.stage=='conn':
-			self.conn_clients()
 		while True:
+			if self.stage=='conn':
+				self.conn_clients()
 			if self.stage=='group':
 				#客户端分组阶段
 				self.client_group()
