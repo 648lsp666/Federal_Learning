@@ -1,7 +1,8 @@
 # 控制全局模型 
 import copy
 import math
-import torch 
+import torch
+import torch_pruning as tp
 import numpy as np
 from torchvision import datasets, transforms
 
@@ -11,7 +12,6 @@ from pruning_utils import regroup as prune_regroup
 from conf import conf
 import torch.nn.utils.prune as prune
 from dataset import get_dataset
-
 
   #获取参数平均值
 def average_weights(w):
@@ -59,6 +59,57 @@ class Global_model(object):
     pruning_model(self.model, ratio, conv1=True)  #全局非结构化剪枝
     #check_sparsity(self.model, conv1=False)
 
+  #Torch_pruning结构化剪枝,imp_strategy=Magnitude/Taylor(Default)/Hessian
+  def tp_prune(self, trace_input, ratio,
+               imp_strategy='Taylor', degree=2, iterative_steps=1, show_step=False, show_group=False):
+    print(f'Channel Ratio:{ratio}')
+    if imp_strategy == 'Magnitude':
+      assert degree == 1 or degree == 2  # degree must be 1 or 2
+      imp = tp.importance.MagnitudeImportance(p=degree)
+    elif imp_strategy == 'Taylor':
+      imp = tp.importance.TaylorImportance()
+    elif imp_strategy == 'Hessian':
+      imp = tp.importance.HessianImportance()
+    else:
+      return
+
+    # Ignore some layers, e.g., the output layer
+    ignored_layers = []
+    for m in self.model.modules():
+      if isinstance(m, torch.nn.Linear) and m.out_features == 1000:
+        ignored_layers.append(m)  # DO NOT prune the final classifier!
+
+    # Initialize a pruner
+    pruner = tp.pruner.MagnitudePruner(
+      self.model,
+      trace_input,
+      importance=imp,
+      iterative_steps=iterative_steps,
+      pruning_ratio=ratio,  # remove 50% channels, ResNet18 = {64, 128, 256, 512} => ResNet18_Half = {32, 64, 128, 256}
+      ignored_layers=ignored_layers,
+    )
+
+    # prune the model, iteratively if necessary.
+    base_macs, base_nparams = tp.utils.count_ops_and_params(self.model, trace_input)
+    macs, nparams = base_macs, base_nparams
+    for i in range(iterative_steps):
+      if isinstance(imp, tp.importance.TaylorImportance):
+        # A dummy loss, please replace it with your loss function and data!
+        loss = self.model(trace_input).sum()
+        loss.backward()  # before pruner.step()
+      if show_group:
+        for group in pruner.step(
+                interactive=True):  # Warning: groups must be handled sequentially. Do not keep them as a list.
+          print(group)
+          group.prune()
+      else:
+        pruner.step()
+      macs, nparams = tp.utils.count_ops_and_params(self.model, trace_input)
+      if show_step:
+        print('Current sparsity:' + str(100 * nparams / base_nparams) + '%')
+
+    return nparams/base_nparams
+
   # 掩码结构化重组
   # 未剪枝模型--(mask_weight结构化重组)->剪枝模型
   def regroup(self, weight_with_mask):
@@ -73,12 +124,13 @@ class Global_model(object):
     #check_sparsity(self.model, conv1=args.conv1)
     return current_mask
 
-  def refill(self, weight_with_mask):
+  def refill(self, weight_with_mask,mask_only=False):
     current_mask = extract_mask(weight_with_mask)
-
     # 先用train_loader=self.val_loader 把代码跑通
-    prune_model_custom_fillback(self.model, current_mask, criteria='remain', train_loader=self.val_loader,trained_weight=self.model.state_dict(),init_weight=self.init_weight)
-
+    if mask_only:
+      return prune_model_custom_fillback(self.model, current_mask, criteria='remain', train_loader=self.val_loader,trained_weight=self.model.state_dict(),init_weight=self.init_weight,return_mask_only=True)
+    else:
+      return prune_model_custom_fillback(self.model, current_mask, criteria='remain', train_loader=self.val_loader,trained_weight=self.model.state_dict(),init_weight=self.init_weight)
   # 载入预训练模型(彩票)
   def load_pretrained(self):
     initalization = torch.load(conf['pretrained'], map_location=torch.device(conf['global_dev']))
@@ -89,7 +141,7 @@ class Global_model(object):
       print('loading from state_dict')
       initalization = initalization['state_dict']
 
-    loading_weight = extract_main_weight(initalization, fc=True, conv1=True)
+    loading_weight = extract_main_weight(initalization)
     new_initialization = self.model.state_dict()
     if not 'normalize.std' in loading_weight:
       loading_weight['normalize.std'] = new_initialization['normalize.std']
@@ -109,10 +161,6 @@ class Global_model(object):
     #print('*number of model weight={}'.format(len(self.model.state_dict().keys())))
     self.model.load_state_dict(loading_weight)
 
-
-
-  import math
-
   #降速逼近end_ratio
   def increase_ratio(self, end_ratio, speed=0.2):
     delta = end_ratio - self.ratio
@@ -123,17 +171,140 @@ class Global_model(object):
   def init_ratio(self):
     self.ratio = self.start_ratio
 
+  def get_bits(self):
+    state_dict = self.model.state_dict()
+    total_bits = 0
+    for param_name, param_tensor in state_dict.items():
+      total_bits += param_tensor.numel() * param_tensor.element_size() * 8
+    return total_bits
+
+  def magic_formula(self, x):
+    return (12897 * (
+              (x - 4 / 5) * (x - 3 / 4) * (x - 7 / 10) * (x - 13 / 20) * (x - 3 / 5) * (x - 11 / 20) * (x - 1 / 2) * (
+                x - 9 / 20) * (x - 2 / 5) * (x - 7 / 20) * (x - 3 / 10) * (x - 1 / 4) * (x - 1 / 5) * (x - 3 / 20)) / (
+                      100000 * (((-4 / 5 + 1 / 10) * (-3 / 4 + 1 / 10) * (-7 / 10 + 1 / 10) * (-13 / 20 + 1 / 10) * (
+                        -3 / 5 + 1 / 10) * (-11 / 20 + 1 / 10) * (-1 / 2 + 1 / 10) * (-9 / 20 + 1 / 10) * (
+                                           -2 / 5 + 1 / 10) * (-7 / 20 + 1 / 10) * (-3 / 10 + 1 / 10) * (
+                                           -1 / 4 + 1 / 10) * (-1 / 5 + 1 / 10) * (-3 / 20 + 1 / 10)))) + 139741 * (
+                      (x - 4 / 5) * (x - 3 / 4) * (x - 7 / 10) * (x - 13 / 20) * (x - 3 / 5) * (x - 11 / 20) * (
+                        x - 1 / 2) * (x - 9 / 20) * (x - 2 / 5) * (x - 7 / 20) * (x - 3 / 10) * (x - 1 / 4) * (
+                                x - 1 / 5) * (x - 1 / 10)) / (500000 * ((
+              (-4 / 5 + 3 / 20) * (-3 / 4 + 3 / 20) * (-7 / 10 + 3 / 20) * (-13 / 20 + 3 / 20) * (-3 / 5 + 3 / 20) * (
+                -11 / 20 + 3 / 20) * (-1 / 2 + 3 / 20) * (-9 / 20 + 3 / 20) * (-2 / 5 + 3 / 20) * (-7 / 20 + 3 / 20) * (
+                        -3 / 10 + 3 / 20) * (-1 / 4 + 3 / 20) * (-1 / 5 + 3 / 20) * (-1 / 10 + 3 / 20)))) + 3625569 * (
+                      (x - 4 / 5) * (x - 3 / 4) * (x - 7 / 10) * (x - 13 / 20) * (x - 3 / 5) * (x - 11 / 20) * (
+                        x - 1 / 2) * (x - 9 / 20) * (x - 2 / 5) * (x - 7 / 20) * (x - 3 / 10) * (x - 1 / 4) * (
+                                x - 3 / 20) * (x - 1 / 10)) / (10000000 * ((
+              (-4 / 5 + 1 / 5) * (-3 / 4 + 1 / 5) * (-7 / 10 + 1 / 5) * (-13 / 20 + 1 / 5) * (-3 / 5 + 1 / 5) * (
+                -11 / 20 + 1 / 5) * (-1 / 2 + 1 / 5) * (-9 / 20 + 1 / 5) * (-2 / 5 + 1 / 5) * (-7 / 20 + 1 / 5) * (
+                        -3 / 10 + 1 / 5) * (-1 / 4 + 1 / 5) * (-3 / 20 + 1 / 5) * (-1 / 10 + 1 / 5)))) + 4171983 * (
+                      (x - 4 / 5) * (x - 3 / 4) * (x - 7 / 10) * (x - 13 / 20) * (x - 3 / 5) * (x - 11 / 20) * (
+                        x - 1 / 2) * (x - 9 / 20) * (x - 2 / 5) * (x - 7 / 20) * (x - 3 / 10) * (x - 1 / 5) * (
+                                x - 3 / 20) * (x - 1 / 10)) / (10000000 * ((
+              (-4 / 5 + 1 / 4) * (-3 / 4 + 1 / 4) * (-7 / 10 + 1 / 4) * (-13 / 20 + 1 / 4) * (-3 / 5 + 1 / 4) * (
+                -11 / 20 + 1 / 4) * (-1 / 2 + 1 / 4) * (-9 / 20 + 1 / 4) * (-2 / 5 + 1 / 4) * (-7 / 20 + 1 / 4) * (
+                        -3 / 10 + 1 / 4) * (-1 / 5 + 1 / 4) * (-3 / 20 + 1 / 4) * (-1 / 10 + 1 / 4)))) + 51133573 * (
+                      (x - 4 / 5) * (x - 3 / 4) * (x - 7 / 10) * (x - 13 / 20) * (x - 3 / 5) * (x - 11 / 20) * (
+                        x - 1 / 2) * (x - 9 / 20) * (x - 2 / 5) * (x - 7 / 20) * (x - 1 / 4) * (x - 1 / 5) * (
+                                x - 3 / 20) * (x - 1 / 10)) / (100000000 * ((
+              (-4 / 5 + 3 / 10) * (-3 / 4 + 3 / 10) * (-7 / 10 + 3 / 10) * (-13 / 20 + 3 / 10) * (-3 / 5 + 3 / 10) * (
+                -11 / 20 + 3 / 10) * (-1 / 2 + 3 / 10) * (-9 / 20 + 3 / 10) * (-2 / 5 + 3 / 10) * (-7 / 20 + 3 / 10) * (
+                        -1 / 4 + 3 / 10) * (-1 / 5 + 3 / 10) * (-3 / 20 + 3 / 10) * (-1 / 10 + 3 / 10)))) + 11586649 * (
+                      (x - 4 / 5) * (x - 3 / 4) * (x - 7 / 10) * (x - 13 / 20) * (x - 3 / 5) * (x - 11 / 20) * (
+                        x - 1 / 2) * (x - 9 / 20) * (x - 2 / 5) * (x - 3 / 10) * (x - 1 / 4) * (x - 1 / 5) * (
+                                x - 3 / 20) * (x - 1 / 10)) / (20000000 * ((
+              (-4 / 5 + 7 / 20) * (-3 / 4 + 7 / 20) * (-7 / 10 + 7 / 20) * (-13 / 20 + 7 / 20) * (-3 / 5 + 7 / 20) * (
+                -11 / 20 + 7 / 20) * (-1 / 2 + 7 / 20) * (-9 / 20 + 7 / 20) * (-2 / 5 + 7 / 20) * (-3 / 10 + 7 / 20) * (
+                        -1 / 4 + 7 / 20) * (-1 / 5 + 7 / 20) * (-3 / 20 + 7 / 20) * (-1 / 10 + 7 / 20)))) + 64113089 * (
+                      (x - 4 / 5) * (x - 3 / 4) * (x - 7 / 10) * (x - 13 / 20) * (x - 3 / 5) * (x - 11 / 20) * (
+                        x - 1 / 2) * (x - 9 / 20) * (x - 7 / 20) * (x - 3 / 10) * (x - 1 / 4) * (x - 1 / 5) * (
+                                x - 3 / 20) * (x - 1 / 10)) / (100000000 * ((
+              (-4 / 5 + 2 / 5) * (-3 / 4 + 2 / 5) * (-7 / 10 + 2 / 5) * (-13 / 20 + 2 / 5) * (-3 / 5 + 2 / 5) * (
+                -11 / 20 + 2 / 5) * (-1 / 2 + 2 / 5) * (-9 / 20 + 2 / 5) * (-7 / 20 + 2 / 5) * (-3 / 10 + 2 / 5) * (
+                        -1 / 4 + 2 / 5) * (-1 / 5 + 2 / 5) * (-3 / 20 + 2 / 5) * (-1 / 10 + 2 / 5)))) + 6990369 * (
+                      (x - 4 / 5) * (x - 3 / 4) * (x - 7 / 10) * (x - 13 / 20) * (x - 3 / 5) * (x - 11 / 20) * (
+                        x - 1 / 2) * (x - 2 / 5) * (x - 7 / 20) * (x - 3 / 10) * (x - 1 / 4) * (x - 1 / 5) * (
+                                x - 3 / 20) * (x - 1 / 10)) / (10000000 * ((
+              (-4 / 5 + 9 / 20) * (-3 / 4 + 9 / 20) * (-7 / 10 + 9 / 20) * (-13 / 20 + 9 / 20) * (-3 / 5 + 9 / 20) * (
+                -11 / 20 + 9 / 20) * (-1 / 2 + 9 / 20) * (-2 / 5 + 9 / 20) * (-7 / 20 + 9 / 20) * (-3 / 10 + 9 / 20) * (
+                        -1 / 4 + 9 / 20) * (-1 / 5 + 9 / 20) * (-3 / 20 + 9 / 20) * (-1 / 10 + 9 / 20)))) + 29983 * (
+                      (x - 4 / 5) * (x - 3 / 4) * (x - 7 / 10) * (x - 13 / 20) * (x - 3 / 5) * (x - 11 / 20) * (
+                        x - 9 / 20) * (x - 2 / 5) * (x - 7 / 20) * (x - 3 / 10) * (x - 1 / 4) * (x - 1 / 5) * (
+                                x - 3 / 20) * (x - 1 / 10)) / (40000 * ((
+              (-4 / 5 + 1 / 2) * (-3 / 4 + 1 / 2) * (-7 / 10 + 1 / 2) * (-13 / 20 + 1 / 2) * (-3 / 5 + 1 / 2) * (
+                -11 / 20 + 1 / 2) * (-9 / 20 + 1 / 2) * (-2 / 5 + 1 / 2) * (-7 / 20 + 1 / 2) * (-3 / 10 + 1 / 2) * (
+                        -1 / 4 + 1 / 2) * (-1 / 5 + 1 / 2) * (-3 / 20 + 1 / 2) * (-1 / 10 + 1 / 2)))) + 79818063 * (
+                      (x - 4 / 5) * (x - 3 / 4) * (x - 7 / 10) * (x - 13 / 20) * (x - 3 / 5) * (x - 1 / 2) * (
+                        x - 9 / 20) * (x - 2 / 5) * (x - 7 / 20) * (x - 3 / 10) * (x - 1 / 4) * (x - 1 / 5) * (
+                                x - 3 / 20) * (x - 1 / 10)) / (100000000 * ((
+              (-4 / 5 + 11 / 20) * (-3 / 4 + 11 / 20) * (-7 / 10 + 11 / 20) * (-13 / 20 + 11 / 20) * (
+                -3 / 5 + 11 / 20) * (-1 / 2 + 11 / 20) * (-9 / 20 + 11 / 20) * (-2 / 5 + 11 / 20) * (
+                        -7 / 20 + 11 / 20) * (-3 / 10 + 11 / 20) * (-1 / 4 + 11 / 20) * (-1 / 5 + 11 / 20) * (
+                        -3 / 20 + 11 / 20) * (-1 / 10 + 11 / 20)))) + 2102377 * (
+                      (x - 4 / 5) * (x - 3 / 4) * (x - 7 / 10) * (x - 13 / 20) * (x - 11 / 20) * (x - 1 / 2) * (
+                        x - 9 / 20) * (x - 2 / 5) * (x - 7 / 20) * (x - 3 / 10) * (x - 1 / 4) * (x - 1 / 5) * (
+                                x - 3 / 20) * (x - 1 / 10)) / (2500000 * ((
+              (-4 / 5 + 3 / 5) * (-3 / 4 + 3 / 5) * (-7 / 10 + 3 / 5) * (-13 / 20 + 3 / 5) * (-11 / 20 + 3 / 5) * (
+                -1 / 2 + 3 / 5) * (-9 / 20 + 3 / 5) * (-2 / 5 + 3 / 5) * (-7 / 20 + 3 / 5) * (-3 / 10 + 3 / 5) * (
+                        -1 / 4 + 3 / 5) * (-1 / 5 + 3 / 5) * (-3 / 20 + 3 / 5) * (-1 / 10 + 3 / 5)))) + 8780203 * (
+                      (x - 4 / 5) * (x - 3 / 4) * (x - 7 / 10) * (x - 3 / 5) * (x - 11 / 20) * (x - 1 / 2) * (
+                        x - 9 / 20) * (x - 2 / 5) * (x - 7 / 20) * (x - 3 / 10) * (x - 1 / 4) * (x - 1 / 5) * (
+                                x - 3 / 20) * (x - 1 / 10)) / (10000000 * ((
+              (-4 / 5 + 13 / 20) * (-3 / 4 + 13 / 20) * (-7 / 10 + 13 / 20) * (-3 / 5 + 13 / 20) * (
+                -11 / 20 + 13 / 20) * (-1 / 2 + 13 / 20) * (-9 / 20 + 13 / 20) * (-2 / 5 + 13 / 20) * (
+                        -7 / 20 + 13 / 20) * (-3 / 10 + 13 / 20) * (-1 / 4 + 13 / 20) * (-1 / 5 + 13 / 20) * (
+                        -3 / 20 + 13 / 20) * (-1 / 10 + 13 / 20)))) + 18214359 * (
+                      (x - 4 / 5) * (x - 3 / 4) * (x - 13 / 20) * (x - 3 / 5) * (x - 11 / 20) * (x - 1 / 2) * (
+                        x - 9 / 20) * (x - 2 / 5) * (x - 7 / 20) * (x - 3 / 10) * (x - 1 / 4) * (x - 1 / 5) * (
+                                x - 3 / 20) * (x - 1 / 10)) / (20000000 * ((
+              (-4 / 5 + 7 / 10) * (-3 / 4 + 7 / 10) * (-13 / 20 + 7 / 10) * (-3 / 5 + 7 / 10) * (-11 / 20 + 7 / 10) * (
+                -1 / 2 + 7 / 10) * (-9 / 20 + 7 / 10) * (-2 / 5 + 7 / 10) * (-7 / 20 + 7 / 10) * (-3 / 10 + 7 / 10) * (
+                        -1 / 4 + 7 / 10) * (-1 / 5 + 7 / 10) * (-3 / 20 + 7 / 10) * (
+                        -1 / 10 + 7 / 10)))) + 117334489 * (
+                      (x - 4 / 5) * (x - 7 / 10) * (x - 13 / 20) * (x - 3 / 5) * (x - 11 / 20) * (x - 1 / 2) * (
+                        x - 9 / 20) * (x - 2 / 5) * (x - 7 / 20) * (x - 3 / 10) * (x - 1 / 4) * (x - 1 / 5) * (
+                                x - 3 / 20) * (x - 1 / 10)) / (125000000 * ((
+              (-4 / 5 + 3 / 4) * (-7 / 10 + 3 / 4) * (-13 / 20 + 3 / 4) * (-3 / 5 + 3 / 4) * (-11 / 20 + 3 / 4) * (
+                -1 / 2 + 3 / 4) * (-9 / 20 + 3 / 4) * (-2 / 5 + 3 / 4) * (-7 / 20 + 3 / 4) * (-3 / 10 + 3 / 4) * (
+                        -1 / 4 + 3 / 4) * (-1 / 5 + 3 / 4) * (-3 / 20 + 3 / 4) * (-1 / 10 + 3 / 4)))) + 1211 * (
+                      (x - 3 / 4) * (x - 7 / 10) * (x - 13 / 20) * (x - 3 / 5) * (x - 11 / 20) * (x - 1 / 2) * (
+                        x - 9 / 20) * (x - 2 / 5) * (x - 7 / 20) * (x - 3 / 10) * (x - 1 / 4) * (x - 1 / 5) * (
+                                x - 3 / 20) * (x - 1 / 10)) / (1250 * ((
+              (-3 / 4 + 4 / 5) * (-7 / 10 + 4 / 5) * (-13 / 20 + 4 / 5) * (-3 / 5 + 4 / 5) * (-11 / 20 + 4 / 5) * (
+                -1 / 2 + 4 / 5) * (-9 / 20 + 4 / 5) * (-2 / 5 + 4 / 5) * (-7 / 20 + 4 / 5) * (-3 / 10 + 4 / 5) * (
+                        -1 / 4 + 4 / 5) * (-1 / 5 + 4 / 5) * (-3 / 20 + 4 / 5) * (-1 / 10 + 4 / 5)))))
 
 if __name__=='__main__':
   global_model=Global_model()
   weight_with_mask = global_model.model.state_dict()
   global_model.init_ratio()
+  target_ratio = 0.5
+  # Refill/Regroup prune
+  # for struct_prune_time in range(2):
+  #   for unstruct_prune_time in range(3):
+  #     print(f'Unstruct Prune[{struct_prune_time}][{unstruct_prune_time}], Prune Ratio: {global_model.ratio}')
+  #     # 非结构化剪枝（可迭代）
+  #     global_model.u_prune(global_model.ratio)
+  #     weight_with_mask = global_model.model.state_dict()
+  #     remove_prune(global_model.model, conv1=True)
+  #     # 如果达到目标剪枝率，跳出循环
+  #     if global_model.ratio == target_ratio:
+  #       print('Reach Target Ratio')
+  #       break
+  #     global_model.increase_ratio(target_ratio)
+  #
+  #   print(f'Struct Prune[{struct_prune_time}]')
+  #   #mask_weight = global_model.regroup(weight_with_mask)
+  #   global_model.refill(weight_with_mask)
+  #   remove_prune(global_model.model, conv1=False)
+  #   check_sparsity(global_model.model, conv1=False)
 
-  target_ratio = 0.8
-
-  for struct_prune_time in range(2):
-    for unstruct_prune_time in range(3):
-      print(f'Unstruct Prune[{struct_prune_time}][{unstruct_prune_time}], Prune Ratio: {global_model.ratio}')
+  # Refill + Torch_pruning prune
+  rewind_weight = global_model.model.state_dict()
+  # train code here
+  if True:
+    for unstruct_prune_time in range(10):
+      print(f'Unstruct Prune[{unstruct_prune_time}], Prune Ratio: {global_model.ratio}')
       # 非结构化剪枝（可迭代）
       global_model.u_prune(global_model.ratio)
       weight_with_mask = global_model.model.state_dict()
@@ -144,10 +315,35 @@ if __name__=='__main__':
         break
       global_model.increase_ratio(target_ratio)
 
-    print(f'Struct Prune[{struct_prune_time}]')
+    print(f'Refill Struct Prune')
     #mask_weight = global_model.regroup(weight_with_mask)
-    global_model.refill(weight_with_mask)
-    remove_prune(global_model.model, conv1=False)
+    prune_mask = global_model.refill(weight_with_mask, mask_only=True)
+    #remove_prune(global_model.model, conv1=False)
     check_sparsity(global_model.model, conv1=False)
-  # 这里写简单的测试@mk
-  # 随便剪枝几次 然后regroup一下 ，函数能跑通就行 我后面再调试@zhy
+
+  # Recover weight
+  global_model.model.load_state_dict(rewind_weight)
+
+  # Apply Sparity to model
+  prune_model_custom(global_model.model,prune_mask, conv1=False)
+  remove_prune(global_model.model, conv1=False)
+
+  # TP Permenant Prune
+  global_model.model.zero_grad()  # We don't want to store gradient information
+  trace_input , _ = next(iter(global_model.train_loader))
+  #bits = global_model.get_bits()
+  print('Final sparsity:'+str(100 *
+                              global_model.tp_prune(trace_input.to(global_model.device),
+                                                    0.3, imp_strategy='Magnitude',
+                                                    degree=1)
+                              )+'%')
+  #print('Final sparsity:'+str(100 *
+  #                            global_model.tp_prune(trace_input.to(global_model.device),
+  #                                                  global_model.magic_formula(target_ratio),
+  #                                                  iterative_steps=5 , show_step=True)
+  #                            )+'%')
+
+  #print('Start Bits:'+str(bits)+' Final Bits:'+str(global_model.get_bits())+'...'+str(100*global_model.get_bits()/bits)+'%')
+  # Save model
+  #global_model.model.zero_grad()  # We don't want to store gradient information
+  #torch.save(global_model.model, 'final.pth')  # without .state_dict
