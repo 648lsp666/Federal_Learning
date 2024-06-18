@@ -95,6 +95,9 @@ def fed_train(clients,global_model):
 	global_model.aggregate(client_update)
 	torch.save(global_model,os.path.join(conf['temp_path'],f'global{global_epoch}_model'))
 
+#联邦学习评估函数 
+def fed_eval():
+  pass
 
 
 
@@ -158,7 +161,7 @@ if __name__=='__main__':
             
 	# 开始模拟退火分组
 	# groups=simulated_annealing() 
-	groups=[[0]]#测试用
+	groups=[[0,1]]#测试用
 	group_id=0
 	print('group finish')
   #分组完成
@@ -201,6 +204,7 @@ if __name__=='__main__':
 		group_id+=1
 
 	print('fed prune finish')
+	fed_train
 
 
   

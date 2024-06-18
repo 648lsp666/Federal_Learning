@@ -124,15 +124,5 @@ if __name__ == "__main__":
     op=recv_data(client)
 
     
-
-
-
-  # 定义发送循环信息，等待服务器分组和调用训练
-  while True:
-    # 接收主机信息 每次接收缓冲区1024个字节
-    data = client.recv(1024)
-    # 打印接收数据
-    print(data.decode())
-    
     
 
