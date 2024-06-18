@@ -170,9 +170,11 @@ if __name__=='__main__':
 	print('start fed prune')
 	while group_id<=len(groups):
 		weight_with_mask = global_model.model.state_dict()
+		# rewind_weight 应当在训练前被定义
+		rewind_weight = global_model.model.state_dict()
 		global_model.init_ratio()
+		target_ratio = 0.5
 		#测试用例Target_ratio
-		target_ratio = 0.8
 		while global_epoch<= conf['global_epoch']:
 			#训练
 			# 选择参与的客户端
@@ -180,26 +182,36 @@ if __name__=='__main__':
 			#确定目标剪枝率
 			# target_ratio=max([client_info[id] for id in groups[group_id]])
 			fed_train(participants, global_model)
-			global_epoch +=1
+			global_epoch += 1
 			if global_epoch % prune_step == 0:
 				#每过几轮触发一次剪枝
 				print(f'Unstruct Prune, Prune Ratio: {global_model.ratio}')
 				# 非结构化剪枝（可迭代）
-				# global_model.u_prune(global_model.ratio)
-				# weight_with_mask = global_model.model.state_dict()
-				# remove_prune(global_model.model, conv1=True)
+				global_model.u_prune(global_model.ratio)
+				weight_with_mask = global_model.model.state_dict()
+				remove_prune(global_model.model, conv1=True)
 				# 如果达到目标剪枝率，跳出循环
 				if global_model.ratio == target_ratio:
 					print('Reach Target Ratio')
 					break
+				global_model.increase_ratio(target_ratio)
 		# 结构化剪枝重组
-		print('Structure Prune')
-		#mask_weight = global_model.regroup(weight_with_mask)
-		# global_model.refill(weight_with_mask)
-		# remove_prune(global_model.model, conv1=False)
-		# check_sparsity(global_model.model, conv1=False)
-		#重置模型参数		
-
+		print(f'Refill Struct Prune')
+		prune_mask = global_model.refill(weight_with_mask, mask_only=True)
+		# Recover weight
+		global_model.model.load_state_dict(rewind_weight)
+		# Apply Sparity to model
+		prune_model_custom(global_model.model, prune_mask, conv1=False)
+		remove_prune(global_model.model, conv1=False)
+		# TP Permenant Prune
+		global_model.model.zero_grad()
+		trace_input, _ = next(iter(global_model.train_loader))
+		######################把这里的0.3替换为通道剪枝率#######################
+		print('Final sparsity:' + str(100 *
+									  global_model.tp_prune(trace_input.to(global_model.device),
+															0.3, imp_strategy='Magnitude',
+															degree=1)
+									  ) + '%')
 		#切换客户端组	
 		group_id+=1
 
