@@ -98,15 +98,16 @@ if __name__ == "__main__":
       'data_dis':local_model.train_dis,
       'train_data_len':local_model.train_len, 
       'train_time':train_time, 
-      'prune_ratio':0 }
+      'prune_ratio':0,
+      'channel_sparsity':0 }
     print(client_info)
     send_data(client,client_info)
     #第三步 接收服务器下发的时间阈值，本地随机剪枝测时间
     train_time_T=recv_data(client)
     # 在prune_ratio函数中测出客户端在该时间阈值下的剪枝率
-    prune_ratio=local_model.prune_ratio(train_time_T)
+    prune_ratio,channel_sparsity=local_model.prune_ratio(train_time_T)
     # 上传该剪枝率
-    send_data(client,[client_id,prune_ratio])
+    send_data(client,[client_id,prune_ratio,channel_sparsity])
     print('group finish')
 
   # 等待服务器下一步命令
@@ -122,6 +123,13 @@ if __name__ == "__main__":
     # 上传状态字典
     send_data(client,local_model.model.state_dict()) 
     op=recv_data(client)
+  if op=='eval':
+    print('fed finish' )
+    #直接用全局模型覆盖本地模型
+    local_model.model=recv_data(client)
+    test_acc=local_model.eval()
+    send_data(client,test_acc)
+
 
     
     

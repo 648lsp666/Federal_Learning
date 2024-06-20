@@ -131,12 +131,36 @@ class Local_model(object):
       self.s_prune(current)
       if self.time_test() <= time_T:
         macs, nparams = tp.utils.count_ops_and_params(model, example_inputs)
-        self.model = torchvision.models.resnet18()
+        # self.model = torchvision.models.resnet18()
         break
       current += step
     prune_ratio= 1 - nparams/base_nparams
     print(f'prune_ratio:{prune_ratio}')
-    return prune_ratio
+    # 返回参数稀疏率和通道稀疏率
+    return prune_ratio,current
+  
+  # 评估函数
+  def eval(self):
+    device=conf['device']
+    self.model.eval()  # 启用测试模式
+ 
+    # 初始化测试精度
+    correct = 0
+    total = 0
+    
+    # 通过测试数据集
+    with torch.no_grad():  # 不追踪梯度信息，加速测试
+      for images, labels in self.test_data:
+        images, labels = images.to(device), labels.to(device)
+        outputs = self.model(images)
+        _, predicted = torch.max(outputs.data, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+    
+    # 计算精度
+    test_accuracy = correct / total
+    print(f'Test Accuracy: {test_accuracy}')
+    return test_accuracy
     
 
 

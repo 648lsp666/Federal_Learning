@@ -87,6 +87,7 @@ def fed_train(clients,global_model):
 	#直接下发模型 覆盖客户端本地模型
 	broadcast(clients,'data',global_model.model)
 	#接受客户端的更新
+	client_update=[]
 	for sock in clients:
 		data=recv_data(sock)			
 		client_update.append(data)
@@ -116,7 +117,7 @@ if __name__=='__main__':
 	#初始客户端组的id
 	group_id=0
 	#剪枝间隔轮数
-	prune_step=5
+	prune_step=2
   # 保存客户端更新
 	client_update=[]
   # 保存客户端分组
@@ -156,24 +157,26 @@ if __name__=='__main__':
   #等待客户端返回剪枝率
 	for sock in clients:
 		data=recv_data(sock)
-		#data[0]客户端id; data[1] 剪枝率
+		#data[0]客户端id; data[1] 参数稀疏率  data[2]通道稀疏率，tp剪枝用
 		client_info[data[0]]['prune_ratio']=data[1]
+		client_info[data[0]]['channel_sparsity']=data[2]
             
 	# 开始模拟退火分组
 	# groups=simulated_annealing() 
-	groups=[[0,1]]#测试用
+	groups=[[0],[1]]#测试用
 	group_id=0
 	print('group finish')
   #分组完成
      
 	# 开始联邦剪枝过程
 	print('start fed prune')
-	while group_id<=len(groups):
+	while group_id<len(groups):
 		weight_with_mask = global_model.model.state_dict()
 		# rewind_weight 应当在训练前被定义
 		rewind_weight = global_model.model.state_dict()
 		global_model.init_ratio()
-		target_ratio = 0.5
+		target_ratio = max([client_info[id]['prune_ratio'] for id in groups[group_id]])
+		channel_sparsity = max([client_info[id]['channel_sparsity'] for id in groups[group_id]])
 		#测试用例Target_ratio
 		while global_epoch<= conf['global_epoch']:
 			#训练
@@ -189,9 +192,9 @@ if __name__=='__main__':
 				# 非结构化剪枝（可迭代）
 				global_model.u_prune(global_model.ratio)
 				weight_with_mask = global_model.model.state_dict()
-				remove_prune(global_model.model, conv1=True)
+				remove_prune(global_model.model, conv1=False)
 				# 如果达到目标剪枝率，跳出循环
-				if global_model.ratio == target_ratio:
+				if global_model.ratio >= target_ratio:
 					print('Reach Target Ratio')
 					break
 				global_model.increase_ratio(target_ratio)
@@ -209,14 +212,34 @@ if __name__=='__main__':
 		######################把这里的0.3替换为通道剪枝率#######################
 		print('Final sparsity:' + str(100 *
 									  global_model.tp_prune(trace_input.to(global_model.device),
-															0.3, imp_strategy='Magnitude',
+															channel_sparsity, imp_strategy='Magnitude',
 															degree=1)
 									  ) + '%')
 		#切换客户端组	
 		group_id+=1
 
 	print('fed prune finish')
-	fed_train
+  # 剪枝结束，微调  
+	while global_epoch<conf['global_epoch']:
+		gruop=random.sample(groups , 1)[0]
+		participants=[clients[i] for i in gruop]
+		fed_train(participants,global_model)
+		global_epoch+=1
+	
+	# 微调结束，模型评估
+	global_model.eval()
+  # 下发评估指令
+  
+	# broadcast(clients,'data','eval')
+	# broadcast(clients,'data',global_model)
+  # #等待客户端返回准确率
+	# for sock in clients:
+	# 	acc=recv_data(sock)
+	# 	client_acc.append(acc)
+	# avgacc=sum(client_acc)/len(client_acc)
+	# print(avgacc)
+  
+
 
 
   

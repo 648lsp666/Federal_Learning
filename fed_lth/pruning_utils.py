@@ -43,7 +43,7 @@ def check_sparsity(model, conv1=True):
     return 100 * (1 - zero_sum / sum_list)
 
 
-def remove_prune(model, conv1=True):
+def remove_prune(model, conv1=False):
     print('remove pruning')
     for name, m in model.named_modules():
         if isinstance(m, nn.Conv2d):

@@ -18,6 +18,8 @@ def average_weights(w):
   w_avg = copy.deepcopy(w[0])
   for key in w_avg.keys():
     for i in range(1, len(w)):
+      if key[-5:]=='_mask':
+        continue
       w_avg[key] += w[i][key]
     w_avg[key] = torch.div(w_avg[key], len(w))
   return w_avg
@@ -56,7 +58,7 @@ class Global_model(object):
     #print('before unstructure prune:')
     #print(self.model.state_dict().keys())
     #print('Current prune rate:' + str(ratio))
-    pruning_model(self.model, ratio, conv1=True)  #全局非结构化剪枝
+    pruning_model(self.model, ratio, conv1=False)  #全局非结构化剪枝
     #check_sparsity(self.model, conv1=False)
 
   #Torch_pruning结构化剪枝,imp_strategy=Magnitude/Taylor(Default)/Hessian
@@ -177,6 +179,29 @@ class Global_model(object):
     for param_name, param_tensor in state_dict.items():
       total_bits += param_tensor.numel() * param_tensor.element_size() * 8
     return total_bits
+
+    # 评估函数
+  def eval(self):
+    device=conf['device']
+    self.model.eval()  # 启用测试模式
+ 
+    # 初始化测试精度
+    correct = 0
+    total = 0
+    
+    # 通过测试数据集
+    with torch.no_grad():  # 不追踪梯度信息，加速测试
+      for images, labels in self.val_loader:
+        images, labels = images.to(device), labels.to(device)
+        outputs = self.model(images)
+        _, predicted = torch.max(outputs.data, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+    
+    # 计算精度
+    test_accuracy = correct / total
+    print(f'Test Accuracy: {test_accuracy}')
+    return test_accuracy
 
   def magic_formula(self, x):
     return (12897 * (
