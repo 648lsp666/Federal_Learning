@@ -66,5 +66,19 @@ conf={
 
     #Global_model设备
     "global_dev" : 'cuda:0',
-    'device':'cuda'
+    'device':'cuda',
+
+
+    #近似差分隐私delta：容错率
+    "dp_mechanism": 'Guassian',#是否开启差分隐私
+    "times":1,
+    "delta": 1e-5,
+    #裁剪clip
+    "clip": 5,
+    #sigma
+    "sigma":0.1,
+    #采样
+    "q":0.1,
+    #差分隐私预算
+    "epsilon":4
 }

@@ -3,8 +3,9 @@
 # 该文件包含客户端模型的相关行为 @zhy
 # 该类与通信模块分离，仅需要客户端id用于划分本地数据集
 
-import torch 
+import torch
 from dataset import get_dataset
+from torch.utils.data import Dataset, DataLoader, TensorDataset
 from conf import conf
 import time
 import torchvision
@@ -13,7 +14,12 @@ import torch_pruning as tp
 from pruning_utils import MySlimmingImportance,MySlimmingPruner
 import torch.nn as nn
 import torch.optim as optim
+
+import numpy as np
+from opacus import PrivacyEngine
 import os
+
+
 
 class Local_model(object):
   def __init__(self, id,model):
@@ -25,15 +31,17 @@ class Local_model(object):
     self.train_data,self.test_data, self.train_dis,_=get_dataset(id)
     self.train_len=sum(self.train_dis)
     self.train_dis=[i/self.train_len for i in self.train_dis]
-    self.loss=[]
-    self.acc=[]
-    self.train_time=0
+    #self.data_size = len(self.train_data)
+    self.noise_scale = self.calculate_noise_scale()
+    #self.torch_dataset = TensorDataset(torch.tensor(data[0]),
+    #                                  torch.tensor(data[1]))
+
     print(self.train_dis)
   
   def local_train(self,train_loader,epoch,lr=0.001):
     device=conf['device']
-    self.model.train()
     # 训练
+    self.model.train()
     # 创建损失函数和优化器
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=0.9)
@@ -47,8 +55,8 @@ class Local_model(object):
       for inputs, labels in train_loader:
         # get the inputs; data is a list of [inputs, labels]
         self.model.to(device)
-        inputs=inputs.to(device)
-        labels=labels.to(device)
+        inputs = inputs.to(device)
+        labels = labels.to(device)
         # zero the parameter gradients
         optimizer.zero_grad()
         # forward + backward + optimize
@@ -58,7 +66,13 @@ class Local_model(object):
         correct += (predicted == labels).sum().item()
         loss = criterion(outputs, labels)
         loss.backward()
+        # 梯度裁剪
+        if conf['dp_mechanism'] != 'NO':
+          self.clip_gradients(self.model)
         optimizer.step()
+        # 添加隐私噪声
+        if conf['dp_mechanism'] != 'NO':
+          self.add_noise(self.model)
         # print statistics
         running_loss += loss.item()
               # 计算精度
@@ -70,8 +84,53 @@ class Local_model(object):
     elapsed_time = end_time - start_time
     print(f'train time:{end_time-start_time}')
     return elapsed_time
-    
+  
+  # 梯度裁剪
+  def clip_gradients(self, model):
+    if conf['dp_mechanism'] == 'Gaussian':
+      # Gaussian use 2 norm
+      self.per_sample_clip(model, conf['clip'], norm=2)
 
+  def per_sample_clip(self, net, clipping, norm):
+    grad_samples = [x.grad_sample for x in net.parameters()]
+    per_param_norms = [
+      g.reshape(len(g), -1).norm(norm, dim=-1) for g in grad_samples
+    ]
+    per_sample_norms = torch.stack(per_param_norms, dim=1).norm(norm, dim=1)
+    per_sample_clip_factor = (
+      torch.div(clipping, (per_sample_norms + 1e-6))
+    ).clamp(max=1.0)
+    for grad in grad_samples:
+      factor = per_sample_clip_factor.reshape(per_sample_clip_factor.shape + (1,) * (grad.dim() - 1))
+      grad.detach().mul_(factor.to(grad.device))
+    # average per sample gradient after clipping and set back gradient
+    for param in net.parameters():
+      param.grad = param.grad_sample.detach().mean(dim=0)
+
+  def add_noise(self, model):
+    #sensitivity = self.cal_sensitivity(conf['lr'], conf['clip'], self.train_len)
+    sensitivity = self.cal_sensitivity(0.01, self.train_len)#0.01)
+    state_dict = model.state_dict()
+    if conf['dp_mechanism'] == 'Gaussian':
+      for k, v in state_dict.items():
+        state_dict[k] += torch.from_numpy(np.random.normal(loc=0, scale=sensitivity * self.noise_scale, size=v.shape)).to(conf['device'])
+    model.load_state_dict(state_dict)
+
+  
+  def cal_sensitivity(lr, clip,  dataset_size):
+    #return 2 * lr * clip / dataset_size
+
+    return 2 * 0.01 * clip / dataset_size
+
+  def Gaussian_Simple(delta, epsilon):
+    #return np.sqrt(2 * np.log(1.25 / delta)) / epsilon
+    return np.sqrt(2 * np.log(1.25 / 1e-5)) / epsilon
+  
+  
+  def calculate_noise_scale(self):
+    epsilonsinglequery = 4#conf['epsilon'] / 1#conf['times']
+    deltasinglequery = 1e-5#conf['delta'] / 1# conf['times']
+    return self.Gaussian_Simple( 4)#(1e-5))#deltasinglequery, epsilonsinglequery )#, epsilonsinglequery)
 
   # 随机训练测试时间
   def time_test(self):
@@ -143,7 +202,6 @@ class Local_model(object):
       self.s_prune(current)
       if self.time_test() <= time_T:
         macs, nparams = tp.utils.count_ops_and_params(model, example_inputs)
-        # self.model = torchvision.models.resnet18()
         break
       current += step
     prune_ratio= 1 - nparams/base_nparams
@@ -173,8 +231,6 @@ class Local_model(object):
     test_accuracy = correct / total
     print(f'Test Accuracy: {test_accuracy}')
     return test_accuracy
-    
-
 
 #测试代码写在这里面
 if __name__=='__main__':

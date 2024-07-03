@@ -47,7 +47,6 @@ def recv_data(sock, expect_msg_type=None):
   if not data:
     return ''
   msg_len = struct.unpack(">I", data)[0]
-  comm_datasize.append(msg_len)
   msg = sock.recv(msg_len, socket.MSG_WAITALL)
   msg = pickle.loads(msg)
 
@@ -139,9 +138,6 @@ if __name__ == "__main__":
                'loss':local_model.loss,
                'acc':local_model.acc}
     send_data(client,eval_info)
-
-
-
     
     
 
