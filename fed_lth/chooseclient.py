@@ -106,6 +106,17 @@ def multi_group_simulated_annealing(client_info, num_iterations, cooling_rate, i
     
     return all_groupings
 
+def client_group(client_info):
+    num_clients = 100
+    group_size = int(num_clients * 0.1)
+    B = 4    
+    initial_pM = 0.3
+    delta_pM = 0.1
+    num_iterations = 10000
+    cooling_rate = 0.99
+    groups = multi_group_simulated_annealing(client_info, num_iterations, cooling_rate, initial_pM, delta_pM, B, group_size)
+    print(f'groups:{groups}')
+    return groups
 # 定义公共接口
 __all__ = ['generate_client_info', 'filter_clients_by_prune_ratio', 'calculate_qcid', 'check_constraints', 'simulated_annealing', 'multi_group_simulated_annealing']
 

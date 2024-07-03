@@ -47,6 +47,7 @@ def recv_data(sock, expect_msg_type=None):
   if not data:
     return ''
   msg_len = struct.unpack(">I", data)[0]
+  comm_datasize.append(msg_len)
   msg = sock.recv(msg_len, socket.MSG_WAITALL)
   msg = pickle.loads(msg)
 
@@ -62,6 +63,7 @@ def send_data(client_socket, data):
     data_bytes = pickle.dumps(data)
     # 发送数据大小
     data_size = len(data_bytes)
+    comm_datasize.append(data_size)
     client_socket.sendall(struct.pack('>I', data_size))
     # 发送数据内容
     client_socket.sendall(data_bytes)
@@ -70,6 +72,10 @@ def send_data(client_socket, data):
 
 
 if __name__ == "__main__":
+  print('Client strat. Waiting...')
+  # 记录通信数据量
+  comm_datasize=[]
+  total_time=[]
   # 服务端为TCP方式，客户端也采用TCP方式，默认参数即为TCP
   client = socket.socket()
   # 连接主机
@@ -119,16 +125,21 @@ if __name__ == "__main__":
     #直接用全局模型覆盖本地模型
     local_model.model=recv_data(client)
     #本地训练
-    local_model.local_train(local_model.train_data,conf['local_epoch'])
+    train_time=local_model.local_train(local_model.train_data,conf['local_epoch'])
+    total_time.append(train_time)
     # 上传状态字典
     send_data(client,local_model.model.state_dict()) 
     op=recv_data(client)
   if op=='eval':
-    print('fed finish' )
-    #直接用全局模型覆盖本地模型
-    local_model.model=recv_data(client)
-    test_acc=local_model.eval()
-    send_data(client,test_acc)
+    print('fed finish,start eval' )
+    # 上传测试数据
+    eval_info={'id':client_id,
+               'total_time':total_time,
+               'comm_size':comm_datasize,
+               'loss':local_model.loss,
+               'acc':local_model.acc}
+    send_data(client,eval_info)
+
 
 
     

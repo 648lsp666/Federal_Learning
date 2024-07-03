@@ -23,7 +23,7 @@ conf={
     # 临时文件路径 存放训练过程发送/接收的数据
     "temp_path":"temp",
     #总客户端数量
-    "num_client" : 2,
+    "num_client" :5,
 	
     # 是否iid
     'iid':True,

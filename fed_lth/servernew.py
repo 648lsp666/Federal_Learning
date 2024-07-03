@@ -4,7 +4,7 @@ from conf import conf
 from global_model import Global_model
 from pruning_utils import *
 import os,struct,pickle
-from chooseclient import simulated_annealing
+from chooseclient import client_group
 import torch
 import random
 
@@ -81,7 +81,7 @@ def conn():
 
 # 联邦训练函数
 def fed_train(clients,global_model):
-	print(f'global train')
+	print(f'global epoch:{global_epoch}')
 		#广播训练命令
 	broadcast(clients,'data','train')
 	#直接下发模型 覆盖客户端本地模型
@@ -162,8 +162,8 @@ if __name__=='__main__':
 		client_info[data[0]]['channel_sparsity']=data[2]
             
 	# 开始模拟退火分组
-	# groups=simulated_annealing() 
-	groups=[[0],[1]]#测试用
+	groups=client_group(client_info=client_info) 
+	# groups=[[0],[1]]#测试用
 	group_id=0
 	print('group finish')
   #分组完成
@@ -230,14 +230,17 @@ if __name__=='__main__':
 	global_model.eval()
   # 下发评估指令
   
-	# broadcast(clients,'data','eval')
+	broadcast(clients,'data','eval')
 	# broadcast(clients,'data',global_model)
-  # #等待客户端返回准确率
-	# for sock in clients:
-	# 	acc=recv_data(sock)
-	# 	client_acc.append(acc)
-	# avgacc=sum(client_acc)/len(client_acc)
-	# print(avgacc)
+  #等待客户端返回统计数据
+	eval_info=[]
+	for sock in clients:
+		data=recv_data(sock)
+		eval_info.append(data)
+	with open('temp/total.pkl','wb') as f:
+		pickle.dump(eval_info,f)
+	with open('temp/client_info.pkl','wb') as f1:
+		pickle.dump(client_info,f1)
   
 
 

@@ -25,6 +25,9 @@ class Local_model(object):
     self.train_data,self.test_data, self.train_dis,_=get_dataset(id)
     self.train_len=sum(self.train_dis)
     self.train_dis=[i/self.train_len for i in self.train_dis]
+    self.loss=[]
+    self.acc=[]
+    self.train_time=0
     print(self.train_dis)
   
   def local_train(self,train_loader,epoch,lr=0.001):
@@ -39,6 +42,8 @@ class Local_model(object):
     start_time = time.time()
     for e in range(epoch):
       running_loss = 0.0
+      total=0
+      correct=0
       for inputs, labels in train_loader:
         # get the inputs; data is a list of [inputs, labels]
         self.model.to(device)
@@ -48,12 +53,19 @@ class Local_model(object):
         optimizer.zero_grad()
         # forward + backward + optimize
         outputs = self.model(inputs)
+        _, predicted = torch.max(outputs.data, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
         # print statistics
         running_loss += loss.item()
-      print(f'epoch:{e+1} loss: {running_loss / 100:.3f}')
+              # 计算精度
+      test_accuracy = correct / total
+      print(f'epoch:{e+1} loss: {running_loss / 100:.3f}; Test Accuracy: {test_accuracy:.4f}')
+      self.loss.append(running_loss)
+      self.acc.append(test_accuracy)
     end_time = time.time()
     elapsed_time = end_time - start_time
     print(f'train time:{end_time-start_time}')
