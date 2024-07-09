@@ -39,7 +39,6 @@ class Global_model(object):
                                      weight_decay=float(conf['weight_decay']))
     self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=self.decreasing_lr, gamma=0.1)
 
-    self.global_epoch = conf['global_epoch']
     self.node_num = conf['num_client']  #可以声明对象时按实际需求设置
     self.sub_epoch = conf['local_epoch']
     self.start_ratio = conf['start_ratio'] #初始剪枝率
@@ -47,10 +46,20 @@ class Global_model(object):
 
     self.init_weight = self.model.state_dict()
     #self.load_pretrained()
+    self.acc=[]
+    self.loss=[]
+    self.global_epoch=0
 
   #聚合函数.local_weights应当是包含多个model.state_dict()的列表
-  def aggregate(self,local_weights):
+  def aggregate(self,local_weights,client_loss,client_acc):
+    self.global_epoch+=1
     self.model.load_state_dict(average_weights(local_weights))
+    avg_loss=sum(client_loss)/len(client_loss)
+    avg_acc=sum(client_acc)/len(client_acc)
+    self.acc.append(avg_acc)
+    self.loss.append(avg_loss)
+    print(f'avg_loss:{avg_loss},acc:{avg_acc}')
+    
 
   # 每一轮FL非结构剪枝,输入剪枝率@mk,由于中途需要remove_prune,此剪枝率应递增
   def u_prune(self, ratio):

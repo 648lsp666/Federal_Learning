@@ -35,8 +35,9 @@ class Local_model(object):
     self.noise_scale = self.calculate_noise_scale()
     #self.torch_dataset = TensorDataset(torch.tensor(data[0]),
     #                                  torch.tensor(data[1]))
-
-    print(self.train_dis)
+    self.acc=[]
+    self.loss=[]
+    # print(self.train_dis)
   
   def local_train(self,train_loader,epoch,lr=0.001):
     device=conf['device']
@@ -77,13 +78,13 @@ class Local_model(object):
         running_loss += loss.item()
               # 计算精度
       test_accuracy = correct / total
-      print(f'epoch:{e+1} loss: {running_loss / 100:.3f}; Test Accuracy: {test_accuracy:.4f}')
+      # print(f'epoch:{e+1} loss: {running_loss / 100:.3f}; Test Accuracy: {test_accuracy:.4f}')
       self.loss.append(running_loss)
       self.acc.append(test_accuracy)
     end_time = time.time()
     elapsed_time = end_time - start_time
-    print(f'train time:{end_time-start_time}')
-    return elapsed_time
+    # print(f'train time:{end_time-start_time}')
+    return elapsed_time,running_loss,test_accuracy
   
   # 梯度裁剪
   def clip_gradients(self, model):
@@ -139,7 +140,8 @@ class Local_model(object):
     labels = torch.randint(0, conf['n_class']-1, (conf['batch_size'],))  # 16个标签，范围在0-9之间 10分类任务
     loader=torch.utils.data.DataLoader(list(zip(inputs, labels)),batch_size=conf['batch_size'])
     # 一个batch的时间
-    time=self.local_train(loader,5)/5
+    time, _ ,_ =self.local_train(loader,5)
+    time=time/5
     # 计算总时间    
     final_time = self.train_len/conf['batch_size']*time*conf['local_epoch']
     print(f'final_time:{final_time}')
