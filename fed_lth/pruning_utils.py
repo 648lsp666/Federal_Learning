@@ -74,7 +74,7 @@ def prune_model_custom(model, mask_dict, conv1=False):
     for name, m in model.named_modules():
         if isinstance(m, nn.Conv2d):
             if (name == 'conv1' and conv1) or (name != 'conv1'):
-                print('pruning layer with custom mask:', name)
+                # print('pruning layer with custom mask:', name)
                 prune.CustomFromMask.apply(m, 'weight', mask=mask_dict[name + '.weight_mask'].to(m.weight.device))
 
 
@@ -114,17 +114,17 @@ def prune_model_custom_fillback(model, mask_dict, conv1=False, criteria="remain"
                 count = torch.sum(mask, 1)  # [C]
                 # sparsity = torch.sum(mask) / mask.numel()
                 num_channel = (count.sum().float() / mask.shape[1]).item()
-                print(num_channel)
-                print(mask.shape[0])
-                print(fillback_rate)
-                print(mask.shape[0] - num_channel)
-                print((mask.shape[0] - num_channel) * fillback_rate)
+                # print(num_channel)
+                # print(mask.shape[0])
+                # print(fillback_rate)
+                # print(mask.shape[0] - num_channel)
+                # print((mask.shape[0] - num_channel) * fillback_rate)
                 int_channel = int(num_channel + (mask.shape[0] - num_channel) * fillback_rate)
                 frac_channel = num_channel - int_channel
-                print(mask.shape)
-                print(int_channel)
+                # print(mask.shape)
+                # print(int_channel)
                 if criteria == 'remain':
-                    print(mask.shape[0] - int_channel)
+                    # print(mask.shape[0] - int_channel)
                     threshold, _ = torch.kthvalue(count, max(mask.shape[0] - int_channel, 1))
 
                     mask[torch.where(count > threshold)[0]] = 1
@@ -235,10 +235,10 @@ def pruning_model_random(model, px):
         index = 0
         if isinstance(m, nn.Conv2d):
             origin_mask = m.weight_mask
-            print((origin_mask == 0).sum().float() / origin_mask.numel())
-            print(index)
+            # print((origin_mask == 0).sum().float() / origin_mask.numel())
+            # print(index)
             index += 1
-            print(name, (origin_mask == 0).sum())
+            # print(name, (origin_mask == 0).sum())
 
 
 def prune_snip(model, train_loader, loss, rate):
@@ -253,7 +253,7 @@ def prune_snip(model, train_loader, loss, rate):
     # calculate score |g * theta|
     for name, m in model.named_modules():
         if isinstance(m, nn.Conv2d) and name != 'conv1':
-            print(m.weight.grad)
+            # print(m.weight.grad)
             scores[name] = torch.clone(m.weight.grad * m.weight).detach().abs_()
             m.weight.grad.data.zero_()
 
@@ -590,7 +590,7 @@ def prune_admm(model, train_loader, loss, rate, optimizer):
     Z, U = initialize_Z_and_U(model)
     for epoch in range(20):
         model.train()
-        print('Epoch: {}'.format(epoch + 1))
+        # print('Epoch: {}'.format(epoch + 1))
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data.cuda(), target.cuda()
             optimizer.zero_grad()
@@ -608,7 +608,7 @@ def prune_admm(model, train_loader, loss, rate, optimizer):
     for name, m in model.named_modules():
         if isinstance(m, nn.Conv2d) and name != 'conv1':
             scores[name] = torch.clone(m.weight.data).detach().abs_()
-            print(scores[name])
+            # print(scores[name])
     # normalize score
     all_scores = torch.cat([torch.flatten(v) for v in scores.values()])
     threshold = torch.kthvalue(all_scores, int(len(all_scores) * rate))[0]
