@@ -172,11 +172,12 @@ class Global_model(object):
     #print('*number of model weight={}'.format(len(self.model.state_dict().keys())))
     self.model.load_state_dict(loading_weight)
 
-  #降速逼近end_ratio
+  #降速逼近end_ratio，最低2%
   def increase_ratio(self, end_ratio, speed=0.2):
     delta = end_ratio - self.ratio
     change = delta * (1 - math.exp(-speed))
-
+    if change <0.01:
+      change=0.01
     self.ratio += change
 
   def init_ratio(self):

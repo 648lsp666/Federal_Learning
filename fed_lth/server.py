@@ -125,8 +125,7 @@ if __name__=='__main__':
 	client_info=dict()
 	#初始客户端组的id
 	group_id=0
-	#剪枝间隔轮数
-	prune_step=5
+
   # 保存客户端更新
 	client_update=[]
   # 保存客户端分组
@@ -181,6 +180,8 @@ if __name__=='__main__':
 	# 开始联邦剪枝过程
 	print('start fed prune')
 	while group_id<len(groups) and global_model.global_epoch<conf['global_epoch']:
+		#剪枝间隔轮数
+		prune_step=5
 		weight_with_mask = global_model.model.state_dict()
 		global_model.init_ratio()
 		target_ratio = max([client_info[id]['prune_ratio'] for id in groups[group_id]])
@@ -201,6 +202,10 @@ if __name__=='__main__':
 					print('Reach Target Ratio')
 					break
 				global_model.increase_ratio(target_ratio)
+			#剪枝后的一轮，如果精度下降超过5%则增大剪枝间隔
+			if global_model.global_epoch % prune_step == 1:
+				if global_model.acc[-1]-global_model.acc[-2]>0.05:
+					prune_step+=1
 		# 结构化剪枝重组
 		print(f'Refill Struct Prune')
 		prune_mask = global_model.refill(weight_with_mask, mask_only=True)
