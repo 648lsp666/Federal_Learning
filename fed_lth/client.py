@@ -47,7 +47,7 @@ def recv_data(sock, expect_msg_type=None):
     return ''
   msg_len = struct.unpack(">I", data)[0]
   msg = sock.recv(msg_len, socket.MSG_WAITALL)
-  msg = decompress(pickle.loads(msg))
+  msg = pickle.loads(decompress(msg))
 
   if (expect_msg_type is not None) and (msg[0] != expect_msg_type):
     #print(msg)
@@ -147,12 +147,16 @@ if __name__ == "__main__":
     op=recv_data(client.sock)
     if op=='eval':
       print('fed finish,start eval' )
+      client.local_model.model=recv_data(client.sock)
+      final_acc=client.local_model.eval()
+      # print(f'client{client.id} final Acc:{final_acc}')
       # 上传测试数据
       eval_info={'id':client.id,
                 'total_time':total_time,
                 'comm_size':comm_datasize,
-                'loss':client.local_model.loss,
-                'acc':client.local_model.acc}
+                'loss_curve':client.local_model.loss,
+                'acc_curve':client.local_model.acc,
+                'final_acc':final_acc}
       send_data(client.sock,eval_info)
   for client in client_list:
     op=recv_data(client.sock)

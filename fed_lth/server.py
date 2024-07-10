@@ -42,7 +42,7 @@ def send_data(client_socket, data):
 def recv_data(sock ,expect_msg_type=None):
 	msg_len = struct.unpack(">I", sock.recv(4))[0]
 	msg = sock.recv(msg_len, socket.MSG_WAITALL)
-	msg = decompress(pickle.loads(msg))
+	msg = pickle.loads(decompress(msg))
 
 	if (expect_msg_type is not None) and (msg[0] != expect_msg_type):
 		#print(msg)
@@ -116,11 +116,7 @@ if __name__=='__main__':
 	global_model=Global_model()
 	#记录当前连接的客户端
 	clients=[]
-	# 全局联邦训练周期,从0开始
 
-	#全局模型效果
-	client_acc=[]
-	client_loss=[]
 	# 保存客户端信息
 	client_info=dict()
 	#初始客户端组的id
@@ -166,14 +162,14 @@ if __name__=='__main__':
 		client_info[data[0]]['channel_sparsity']=data[2]
             
 	# 开始模拟退火分组
-	groups=client_group(client_info=client_info) 
-	# groups=[[0],[1,2]]#测试用
+	# groups=client_group(client_info=client_info) 
+	groups=[[0],[1,2]]#测试用
 	group_id=0
 	print('group finish')
   #分组完成
 	# 训练100轮作为每次重置后参数
 	# rewind_weight 应当在训练前被定义
-	while global_model.global_epoch<100:
+	while global_model.global_epoch<10:
 		fed_train(groups[group_id], global_model)
 		rewind_weight = global_model.model.state_dict()
 
@@ -234,9 +230,9 @@ if __name__=='__main__':
 
   # 下发评估指令
 	broadcast(clients,'data','eval')
+	broadcast(clients,'data',global_model.model)
 	# 微调结束，全局模型评估
 	global_model.eval()
-	# broadcast(clients,'data',global_model)
   #等待客户端返回统计数据
 	eval_info=[]
 	for sock in clients:

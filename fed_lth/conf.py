@@ -39,7 +39,7 @@ conf={
 	
     #全局迭代次数：即服务端和客户端的通信次数
     #通常会设置一个最大的全局迭代次数，但在训练过程中，只要模型满足收敛的条件，那么训练也可以提前终止
-	"global_epoch" : 300,
+	"global_epoch" : 20,
 	
     #本地模型的迭代次数：即每一个客户端在进行本地模型训练时的迭代次数
 	"local_epoch" : 1,
@@ -70,7 +70,7 @@ conf={
 
 
     #近似差分隐私delta：容错率
-    "dp_mechanism": 'Guassian',#是否开启差分隐私
+    "dp_mechanism": 'NO',#是否开启差分隐私，'NO'/ 'Guassian'
     "times":1,
     "delta": 1e-5,
     #裁剪clip
