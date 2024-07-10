@@ -2,15 +2,66 @@ import os
 import torch
 import numpy as np
 import pickle
+import json
+import requests
 from collections import Counter
 from torchvision import transforms
 from torchvision import datasets
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Subset, Dataset
 #from helpers.consts import *
 from helpers.ImageFolderCustomClass import ImageFolderCustomClass
+from tqdm import tqdm
 from conf import conf
+from scipy.ndimage import zoom
 
+class FEMNISTDataset(Dataset):
+    def __init__(self, name, train=True, resize=32):
+        self.resize = resize
+        self.root_url = 'https://drive.brs.red/d/Public/Files/femnist-3500/test'
+        if train:
+            self.root_url = 'https://drive.brs.red/d/Public/Files/femnist-3500/train'
+        self.json_name = name
+        url = f"{self.root_url}/{self.json_name}"
+        try:
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
+            total_size = int(response.headers.get('content-length', 0))
+            block_size = 1024
+            t = tqdm(total=total_size, unit='iB', unit_scale=True, desc=f'Downloading {self.json_name}')
+            json_data = b""
+            for data in response.iter_content(block_size):
+                t.update(len(data))
+                json_data += data
+            t.close()
+        except requests.exceptions.RequestException as e:
+            print(f"Error downloading {self.json_name}: {e}")
+            raise SystemExit(e)
+        data = json.loads(json_data)
+        self.features = np.array([np.array(x).reshape(28, 28) for x in data['user_data']['x']])
+        self.resize_features_with_padding()
+        self.labels = np.array(data['user_data']['y'])
 
+        self.features = torch.tensor(self.features, dtype=torch.float32)
+        self.labels = torch.tensor(self.labels, dtype=torch.uint8)
+
+        self.num_samples = data['num_samples']
+
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, item):
+        return self.features[item], self.labels[item]
+
+    # 填1到目标大小
+    def resize_features_with_padding(self):
+        resized_features = []
+        if self.resize > 28:
+            padding_size = (self.resize - 28) // 2
+            for feature in self.features:
+                padded_feature = np.ones((self.resize, self.resize))
+                padded_feature[padding_size:padding_size + 28, padding_size:padding_size + 28] = feature
+                resized_features.append(padded_feature)
+            self.features = resized_features
 
 # 根据客户端id获取数据集
 def get_dataset(id):
@@ -18,7 +69,9 @@ def get_dataset(id):
     name=conf['dataset_name']
     # download=true表示从下载数据集并把数据集放在root路径中
     if name=='mnist':
-        trans_mnist = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
+        trans_mnist = transforms.Compose([transforms.RandomCrop(32, padding=4),
+                                          transforms.ToTensor(),
+                                          transforms.Normalize((0.1307,), (0.3081,))])
         train_dataset = datasets.MNIST(dir, train=True, download=True, transform=trans_mnist)
         eval_dataset = datasets.MNIST(dir, train=False, download=True, transform=trans_mnist)
 
@@ -76,6 +129,7 @@ def get_dataset(id):
             client_test_idx=pickle.load(f)
         train_indices=client_train_idx[id]
         eval_indices=client_test_idx[id]
+
     # 训练数据集的加载器，自动将数据分割成batch
     # sampler定义从数据集中提取样本的策略
     # 使用sampler：构造数据集的SubsetRandomSampler采样器，它会对下标进行采样
@@ -179,6 +233,34 @@ def get_dataset_cifar10_extr_noniid(num_users = conf['num_client'], n_class=conf
     return train_dataset, test_dataset, user_groups_train, user_groups_test
 
 
+# 获取FEMNIST训练集数据集,id: int/list, return Dataset/list of Dataset
+def get_dataset_femnist_noniid(id):
+    with open('femnist_list.txt', 'r') as file:
+        lines = file.readlines()
+        set_list = [line.strip() for line in lines]
+
+    trans_mnist = transforms.Compose([transforms.RandomCrop(32, padding=4),
+                                      transforms.ToTensor(),
+                                      transforms.Normalize((0.1307,), (0.3081,))])
+    # 检查 id 是整数还是列表
+    if isinstance(id, int):
+        if id >= 3596:
+            raise ValueError(f"ID value {id} exceeds the maximum limit of 3596.")
+        train_dataset = FEMNISTDataset(set_list[id], resize=32)
+        test_dataset = FEMNISTDataset(set_list[id], train=False, resize=32)
+        return train_dataset, test_dataset
+    elif isinstance(id, list):
+        # 检查列表中的任何 id 是否超过上限
+        if any(i >= 3596 for i in id):
+            raise ValueError("One or more ID values in the list exceed the maximum limit of 3596.")
+        # 初始化列表以保存数据集
+        train_datasets = []
+        test_datasets = []
+        # 遍历 id 列表
+        for i in id:
+            train_datasets.append(FEMNISTDataset(set_list[i], resize=32))
+            test_datasets.append(FEMNISTDataset(set_list[i], train=False, resize=32))
+        return train_datasets, test_datasets
 
 #    # dataset for global_model
 # def _getdatatransformswm():
@@ -414,4 +496,17 @@ if __name__=='__main__':
     # with open('noniid\cifar10_test.pkl','wb') as f:
     #   pickle.dump(user_groups_test,f)
     get_dataset(0)
-    
+
+    train_dataset, test_dataset = get_dataset_femnist_noniid(3)
+    train_loader = DataLoader(train_dataset, batch_size=4)
+    for batch in train_loader:
+        x, y = batch
+        print(f'x: {x.shape}, y: {y.shape}')
+        break
+
+    #train_datasets, test_datasets = get_dataset_femnist_noniid([2434, 2454])
+    #train_loader = DataLoader(train_datasets[0], batch_size=4)
+    #for batch in train_loader:
+    #    x, y = batch
+    #    print(f'x: {x}, y: {y}')
+    #    break
