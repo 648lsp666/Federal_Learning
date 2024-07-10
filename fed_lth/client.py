@@ -3,8 +3,7 @@ import time,struct,os
 from conf import conf
 from local_model import Local_model
 import pickle
-import torch 
-
+from gzip import compress,decompress
 
 # @zhy
 # fedlth项目的客户端模块
@@ -48,7 +47,7 @@ def recv_data(sock, expect_msg_type=None):
     return ''
   msg_len = struct.unpack(">I", data)[0]
   msg = sock.recv(msg_len, socket.MSG_WAITALL)
-  msg = pickle.loads(msg)
+  msg = decompress(pickle.loads(msg))
 
   if (expect_msg_type is not None) and (msg[0] != expect_msg_type):
     #print(msg)
@@ -59,7 +58,7 @@ def recv_data(sock, expect_msg_type=None):
 # sock:接收方socket
 def send_data(client_socket, data):
     # 序列化数据
-    data_bytes = pickle.dumps(data)
+    data_bytes = compress(pickle.dumps(data))
     # 发送数据大小
     data_size = len(data_bytes)
     comm_datasize.append(data_size)
@@ -126,7 +125,7 @@ if __name__ == "__main__":
     for client in client_list: 
       op=recv_data(client.sock)
       if op=='train':
-        # print(f'client {client.id} local train')
+        print(f'client {client.id} local train')
         #本地训练
         #直接用全局模型覆盖本地模型
         client.local_model.model=recv_data(client.sock)
@@ -140,7 +139,7 @@ if __name__ == "__main__":
       elif op=='eval':
         break
       else :
-        raise Exception('ERROR!!!!!!!!!!!!!!!!!!!')
+        raise Exception('ERROR!')
     if op=='eval':
       break
 

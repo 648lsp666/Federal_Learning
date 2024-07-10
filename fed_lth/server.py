@@ -7,7 +7,7 @@ import os,struct,pickle
 from chooseclient import client_group
 import torch
 import random
-
+from gzip import compress,decompress
 
   #向单个客户端发送文件函数
   # sock:接收方socket
@@ -28,7 +28,7 @@ import random
 # 发送数据函数     # sock:接收方socket
 def send_data(client_socket, data):
   # 序列化数据
-  data_bytes = pickle.dumps(data)
+  data_bytes = compress(pickle.dumps(data))
   # 发送数据大小
   data_size = len(data_bytes)
   client_socket.sendall(struct.pack('>I', data_size))
@@ -42,7 +42,7 @@ def send_data(client_socket, data):
 def recv_data(sock ,expect_msg_type=None):
 	msg_len = struct.unpack(">I", sock.recv(4))[0]
 	msg = sock.recv(msg_len, socket.MSG_WAITALL)
-	msg = pickle.loads(msg)
+	msg = decompress(pickle.loads(msg))
 
 	if (expect_msg_type is not None) and (msg[0] != expect_msg_type):
 		#print(msg)
@@ -126,7 +126,7 @@ if __name__=='__main__':
 	#初始客户端组的id
 	group_id=0
 	#剪枝间隔轮数
-	prune_step=1
+	prune_step=5
   # 保存客户端更新
 	client_update=[]
   # 保存客户端分组
@@ -167,33 +167,27 @@ if __name__=='__main__':
 		client_info[data[0]]['channel_sparsity']=data[2]
             
 	# 开始模拟退火分组
-	# groups=client_group(client_info=client_info) 
-	groups=[[0],[1,2]]#测试用
+	groups=client_group(client_info=client_info) 
+	# groups=[[0],[1,2]]#测试用
 	group_id=0
 	print('group finish')
   #分组完成
+	# 训练100轮作为每次重置后参数
+	# rewind_weight 应当在训练前被定义
+	while global_model.global_epoch<100:
+		fed_train(groups[group_id], global_model)
+		rewind_weight = global_model.model.state_dict()
 
 	# 开始联邦剪枝过程
 	print('start fed prune')
 	while group_id<len(groups) and global_model.global_epoch<conf['global_epoch']:
 		weight_with_mask = global_model.model.state_dict()
-		# rewind_weight 应当在训练前被定义
-		rewind_weight = global_model.model.state_dict()
 		global_model.init_ratio()
 		target_ratio = max([client_info[id]['prune_ratio'] for id in groups[group_id]])
 		channel_sparsity = max([client_info[id]['channel_sparsity'] for id in groups[group_id]])
 		#测试用例Target_ratio
 		while global_model.global_epoch< conf['global_epoch']:
 			#训练
-			# 参与训练的客户端socket
-			# participants=[]
-			# wait_client=[]
-			# for i in range(len(clients)):
-			# 	if i in groups[group_id]:
-			# 		participants.append(clients[i])
-			# 	else:
-			# 		wait_client.append(clients[i])
-			# broadcast(wait_client,'data','wait')
 			fed_train(groups[group_id], global_model)
 			if global_model.global_epoch % prune_step == 0:
 				#每过几轮触发一次剪枝
@@ -230,14 +224,6 @@ if __name__=='__main__':
   # 剪枝结束，微调  
 	while global_model.global_epoch<conf['global_epoch']:
 		group=random.sample(groups , 1)[0]
-		# participants=[]
-		# wait_client=[]
-		# for i in range(len(clients)):
-		# 	if i in group:
-		# 		participants.append(clients[i])
-		# 	else:
-		# 		wait_client.append(clients[i])
-		# broadcast(wait_client,'data','wait')
 		fed_train(group, global_model)
 	
 
