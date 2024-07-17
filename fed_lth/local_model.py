@@ -16,7 +16,6 @@ import torch.nn as nn
 import torch.optim as optim
 
 import numpy as np
-from opacus import PrivacyEngine
 import os
 
 
@@ -37,15 +36,15 @@ class Local_model(object):
     #                                  torch.tensor(data[1]))
     self.acc=[]
     self.loss=[]
+    self.criterion = nn.CrossEntropyLoss()
     # print(self.train_dis)
   
-  def local_train(self,train_loader,epoch,lr=0.001):
+  def local_train(self,train_loader,epoch,lr=conf['lr']):
     device=conf['device']
     # 训练
     self.model.train()
     # 创建损失函数和优化器
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=0.9)
+    optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=0.5)
 
     # 计算时间
     start_time = time.time()
@@ -65,7 +64,7 @@ class Local_model(object):
         _, predicted = torch.max(outputs.data, 1)
         total += labels.size(0)
         correct += (predicted == labels).sum().item()
-        loss = criterion(outputs, labels)
+        loss = self.criterion(outputs, labels)
         loss.backward()
         # 梯度裁剪
         if conf['dp_mechanism'] != 'NO':
@@ -79,11 +78,11 @@ class Local_model(object):
               # 计算精度
       test_accuracy = correct / total
       # print(f'epoch:{e+1} loss: {running_loss / 100:.3f}; Test Accuracy: {test_accuracy:.4f}')
-      self.loss.append(running_loss)
+      self.loss.append(running_loss/ 100)
       self.acc.append(test_accuracy)
     end_time = time.time()
     elapsed_time = end_time - start_time
-    # print(f'train time:{end_time-start_time}')
+    print(f'train time:{elapsed_time},acc:{test_accuracy}')
     return elapsed_time,running_loss,test_accuracy
   
   # 梯度裁剪
@@ -136,7 +135,7 @@ class Local_model(object):
   # 随机训练测试时间
   def time_test(self):
     # 随机训练测试时间
-    inputs = torch.randn(conf['batch_size'], 3, 224, 224)  # batch_size张 224x224 的图片
+    inputs = torch.randn(conf['batch_size'], 3, 32, 32)  # batch_size张 32x32 的图片
     labels = torch.randint(0, conf['n_class']-1, (conf['batch_size'],))  # 16个标签，范围在0-9之间 10分类任务
     loader=torch.utils.data.DataLoader(list(zip(inputs, labels)),batch_size=conf['batch_size'])
     # 一个batch的时间
@@ -159,7 +158,7 @@ class Local_model(object):
         ignored_layers.append(m)
 
     # 初始化剪枝器
-    example_inputs = torch.randn(1, 3, 224, 224)
+    example_inputs = torch.randn(1, 3, 32, 32)
     iterative_steps = 1
     pruner = MySlimmingPruner(
       self.model,
@@ -175,7 +174,7 @@ class Local_model(object):
     # optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
 
     # # 模拟训练数据
-    # inputs = torch.randn(16, 3, 224, 224)  # 16张 224x224 的图片
+    # inputs = torch.randn(16, 3, 32, 32)  # 16张 32x32 的图片
     # labels = torch.randint(0, 1000, (16,))  # 16个标签，范围在0-999之间
 
     # # 进行稀疏训练
@@ -193,7 +192,7 @@ class Local_model(object):
   # 测试剪枝率，输入是时间阈值 单位秒
   def prune_ratio(self,time_T):
     model = self.model
-    example_inputs = torch.randn(conf['batch_size'], 3, 224, 224).to(conf['device'])    
+    example_inputs = torch.randn(conf['batch_size'], 3, 32, 32).to(conf['device'])    
     base_macs, base_nparams = tp.utils.count_ops_and_params(model, example_inputs)
     start = 0.0
     end = 1.0

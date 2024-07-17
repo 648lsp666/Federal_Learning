@@ -8,48 +8,16 @@ from gzip import compress,decompress
 # @zhy
 # fedlth项目的客户端模块
 
-# sock:接收方socket
-# filename：保存文件的路径
-# def recv_file(sock,filename):
-#   # 接收文件大小
-#   size_data = sock.recv(4)
-#   file_size = struct.unpack('>I', size_data)[0]  # 大端序解包文件大小
-#   print(f'recv file size:{file_size}')
-#   # 接收文件内容并写入文件
-#   with open(filename, 'wb') as file:
-#     while file_size > 0:
-#       chunk = sock.recv(min(1024, file_size))
-#       file_size -= len(chunk)
-#       file.write(chunk)
-#   print("File received successfully.")
-
-
-# recv:接收方socket
-# filename：保存文件的路径
-def send_file(sock, filename):
-  with open(filename, 'rb') as file:
-    file_size = os.path.getsize(filename)
-    print(f"Sending {filename} of size {file_size} bytes.")
-    sock.sendall(struct.pack('>I', file_size))  # 大端序打包文件大小
-    # 发送文件内容
-    while True:
-      chunk = file.read(1024)
-      if not chunk:
-        print(f"File {filename} sent successfully.")
-        break
-      sock.sendall(chunk)
-
 # 接收数据函数     # sock:发送方socket
 def recv_data(sock ,expect_msg_type=None):
 	msg_len = struct.unpack(">I", sock.recv(4))[0]
 	msg = sock.recv(msg_len, socket.MSG_WAITALL)
 	msg = pickle.loads(decompress(msg))
-
 	if (expect_msg_type is not None) and (msg[0] != expect_msg_type):
 		#print(msg)
 		raise Exception("Expected " + expect_msg_type + " but received " + msg[0])
 	# 表示成功接收
-	# sock.sendall(struct.pack('>I', 200))
+	sock.sendall(struct.pack('>I', 200))
 	return msg
 
 # 发送数据函数     # sock:接收方socket
@@ -61,10 +29,10 @@ def send_data(sock, data):
 	sock.sendall(struct.pack('>I', data_size))
 	# 发送数据内容
 	sock.sendall(data_bytes)
-	# # 接收状态码，确定是否成功
-	# code = struct.unpack(">I", sock.recv(4))[0]
-	# if code!=200:
-	# 	raise Exception(f"send data error,socket: {sock}")
+	# 接收状态码，确定是否成功
+	code = struct.unpack(">I", sock.recv(4))[0]
+	if code!=200:
+		raise Exception(f"send data error,socket: {sock}")
 
 class Fed_client:
   def __init__(self):
@@ -84,9 +52,9 @@ class Fed_client:
 
 if __name__ == "__main__":
   #该脚本单线程模拟10个客户端
-  
+  # a=Fed_client()
   client_list=[]
-  for i in range(100):
+  for i in range(10):
     client_list.append(Fed_client())
   # 记录通信数据量
   comm_datasize=[]
@@ -160,9 +128,9 @@ if __name__ == "__main__":
                 'acc_curve':client.local_model.acc,
                 'final_acc':final_acc}
       send_data(client.sock,eval_info)
-  for client in client_list:
-    op=recv_data(client.sock)
-    print(op)
+  # for client in client_list:
+  #   op=recv_data(client.sock)
+  #   print(op)
   print('FL done')
 
 

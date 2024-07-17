@@ -123,9 +123,9 @@ def get_dataset(id):
         
     else:
     #    noniid用main中生成好的数据idx生成数据集
-        with open('noniid\cifar10_train.pkl','rb') as f:
+        with open('noniid/cifar10_train.pkl','rb') as f:
             client_train_idx=pickle.load(f)
-        with open('noniid\cifar10_test.pkl','rb') as f:
+        with open('noniid/cifar10_test.pkl','rb') as f:
             client_test_idx=pickle.load(f)
         train_indices=client_train_idx[id]
         eval_indices=client_test_idx[id]
@@ -504,9 +504,3 @@ if __name__=='__main__':
         print(f'x: {x.shape}, y: {y.shape}')
         break
 
-    #train_datasets, test_datasets = get_dataset_femnist_noniid([2434, 2454])
-    #train_loader = DataLoader(train_datasets[0], batch_size=4)
-    #for batch in train_loader:
-    #    x, y = batch
-    #    print(f'x: {x}, y: {y}')
-    #    break

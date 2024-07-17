@@ -86,12 +86,12 @@ def multi_group_simulated_annealing(client_info, num_iterations, cooling_rate, i
     pM = initial_pM
     
     while remaining_clients:
-        if len(remaining_clients) < group_size:  # 如果剩余客户数量小于group_size, 自成一组
+        if len(remaining_clients) < group_size or pM>=100:  # 如果剩余客户数量小于group_size, 自成一组
             all_groupings.append(remaining_clients)
             break
         
         filtered_client_info = filter_clients_by_prune_ratio(client_info, pM, remaining_clients)
-        if not filtered_client_info:  # 如果没有符合条件的客户端，增加 pM 值
+        if len(filtered_client_info)<group_size:  # 如果没有符合条件的客户端，增加 pM 值
             pM += delta_pM
             continue
         
@@ -107,8 +107,8 @@ def multi_group_simulated_annealing(client_info, num_iterations, cooling_rate, i
     return all_groupings
 
 def client_group(client_info):
-    num_clients = 100
-    group_size = int(num_clients * 0.1)
+    num_clients = len(client_info)
+    group_size = int(num_clients * 0.2)
     B = 4    
     initial_pM = 0.3
     delta_pM = 0.1
@@ -122,23 +122,13 @@ __all__ = ['generate_client_info', 'filter_clients_by_prune_ratio', 'calculate_q
 
 # 外部调用示例
 if __name__ == "__main__":
-    num_clients = 100
-    group_size = int(num_clients * 0.1)
-    B = 4
-    max_data_len = 150
-    max_train_time = 200
-    max_prune_ratio = 0.9
-    
-    initial_pM = 0.3
-    delta_pM = 0.1
-    num_iterations = 10000
-    cooling_rate = 0.99
-    
-    client_info = generate_client_info(num_clients, B, max_data_len, max_train_time, max_prune_ratio)
+    import pickle
+    with open('result/client_info20.pkl','rb') as f:
+        client_info=pickle.load(f)
     
     # 打印生成的客户端信息
     for client in client_info.values():
         print(client)
 
-    all_groupings = multi_group_simulated_annealing(client_info, num_iterations, cooling_rate, initial_pM, delta_pM, B, group_size)
+    all_groupings = client_group(client_info)
     print(f"All groupings: {all_groupings}")
