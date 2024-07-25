@@ -6,17 +6,12 @@ from collections import Counter
 from torchvision import transforms
 from torchvision import datasets
 from torch.utils.data import DataLoader, Subset, Dataset
-#from helpers.consts import *
-from helpers.ImageFolderCustomClass import ImageFolderCustomClass
-from tqdm import tqdm
 from conf import conf
-from scipy.ndimage import zoom
 
-# 根据客户端id获取数据集
-def get_dataset(id):
+def get_dataset():
     dir=conf['dataset_dir']
     name=conf['dataset_name']
-    # download=true表示从下载数据集并把数据集放在root路径中
+        # download=true表示从下载数据集并把数据集放在root路径中
     if name=='mnist':
         trans_mnist = transforms.Compose([transforms.RandomCrop(32, padding=4),
                                           transforms.ToTensor(),
@@ -52,6 +47,13 @@ def get_dataset(id):
         eval_dataset = datasets.CIFAR10(dir, train=False, transform=transform_test)
     else:
         print('Wrong dataset name')
+    return train_dataset,eval_dataset
+
+# 根据客户端id获取样本的idx
+def get_dataidx(id):
+    dir=conf['dataset_dir']
+    name=conf['dataset_name']
+
     #id -1是服务器 直接返回测试集用来测试全局模型的精度
     if id==-1:
         train_loader=torch.utils.data.DataLoader(train_dataset, batch_size=conf["batch_size"])

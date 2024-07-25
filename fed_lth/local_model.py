@@ -26,6 +26,7 @@ class Local_model(object):
     # 从服务器接收到的模型
     # self.model=torch.load(os.path.join(conf['temp_path'],f'client{id}_init_model')) 
     self.model=model
+    self.device=conf['local_dev']
     # 本地数据集的loader
     self.train_data,self.test_data, self.train_dis,_=get_dataset(id)
     self.train_len=sum(self.train_dis)
@@ -40,7 +41,7 @@ class Local_model(object):
     # print(self.train_dis)
   
   def local_train(self,train_loader,epoch,lr=conf['lr']):
-    device=conf['device']
+    device=self.device
     # 训练
     self.model.train()
     # 创建损失函数和优化器
@@ -113,7 +114,7 @@ class Local_model(object):
     state_dict = model.state_dict()
     if conf['dp_mechanism'] == 'Gaussian':
       for k, v in state_dict.items():
-        state_dict[k] += torch.from_numpy(np.random.normal(loc=0, scale=sensitivity * self.noise_scale, size=v.shape)).to(conf['device'])
+        state_dict[k] += torch.from_numpy(np.random.normal(loc=0, scale=sensitivity * self.noise_scale, size=v.shape)).to(self.device)
     model.load_state_dict(state_dict)
 
   
@@ -192,7 +193,7 @@ class Local_model(object):
   # 测试剪枝率，输入是时间阈值 单位秒
   def prune_ratio(self,time_T):
     model = self.model
-    example_inputs = torch.randn(conf['batch_size'], 3, 32, 32).to(conf['device'])    
+    example_inputs = torch.randn(conf['batch_size'], 3, 32, 32).to(self.device)    
     base_macs, base_nparams = tp.utils.count_ops_and_params(model, example_inputs)
     start = 0.0
     end = 1.0
@@ -212,7 +213,7 @@ class Local_model(object):
   
   # 评估函数
   def eval(self):
-    device=conf['device']
+    device=self.device
     self.model.eval()  # 启用测试模式
  
     # 初始化测试精度

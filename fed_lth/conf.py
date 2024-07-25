@@ -3,34 +3,37 @@
 conf={
     #服务器IP地址
 #   222.20.126.150
-    "ip":"192.168.0.1",
+    "ip":"127.0.0.1",
     #服务监听端口
     "port":5000,
 
     #总客户端数量
-    "num_client" :1,
+    "num_client" :10,
     #全局迭代次数：即服务端和客户端的通信次数
     #通常会设置一个最大的全局迭代次数，但在训练过程中，只要模型满足收敛的条件，那么训练也可以提前终止
-	"global_epoch" : 100,
+	"global_epoch" : 1000,
 	
     #本地模型的迭代次数：即每一个客户端在进行本地模型训练时的迭代次数
 	"local_epoch" : 1,
     #本地模型进行训练时的参数-每个batch的大小
 	"batch_size" : 32,
+
     #数据集名称
     "dataset_name":'cifar10',
     # 数据集类别数量
     'num_class':10,
     #数据集位置
     "dataset_dir":'data',
-
+    # "dataset_dir":'datasets/cifar10',
     "use_sparse_conv" : False,
 
+    #初始模型的文件路径：
     "pretrained" : "pretrained/1checkpoint.pth.tar",
-    #初始模型的文件路径：    
     "init_model":'models/init_resnet18.pt',
     # 临时文件路径 存放训练过程发送/接收的数据
     "temp_path":"temp",
+    # 开始剪枝的精度
+    'start_prune':0.5,
 
 	
     # 是否iid
@@ -47,8 +50,8 @@ conf={
 	
 
 	
-    #每次选取k个客户端参与迭代
-	"k" : 2,
+    #每次选取k比例客户端参与迭代
+	"k" : 0.2,
 	
 
 	
@@ -67,8 +70,9 @@ conf={
     "start_ratio" : 0.1,
 
     #Global_model设备
-    "global_dev" : 'cuda:0',
-    'device':'cuda',
+    "global_dev" : 'cuda',
+    'local_dev':'cuda',
+
 
 
     #近似差分隐私delta：容错率

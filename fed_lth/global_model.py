@@ -28,7 +28,7 @@ class Global_model(object):
   # 初始化的变量在这里面
   def __init__(self) -> None:
     # torch.cuda.set_device(int(conf['global_dev']))
-    self.device = torch.device(conf['device'])
+    self.device = torch.device(conf['global_dev'])
     # self.model, self.train_loader, self.val_loader, self.test_loader = setup_model_dataset(conf)
     self.model = torch.load(conf['init_model'])
     self.model.to(self.device)
@@ -192,7 +192,7 @@ class Global_model(object):
 
     # 评估函数
   def eval(self):
-    device=conf['device']
+    device=self.device
     self.model.eval()  # 启用测试模式
  
     # 初始化测试精度
