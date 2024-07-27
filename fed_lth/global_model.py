@@ -27,12 +27,10 @@ def average_weights(w):
 class Global_model(object):
   # 初始化的变量在这里面
   def __init__(self) -> None:
-    # torch.cuda.set_device(int(conf['global_dev']))
     self.device = torch.device(conf['global_dev'])
-    # self.model, self.train_loader, self.val_loader, self.test_loader = setup_model_dataset(conf)
     self.model = torch.load(conf['init_model'])
     self.model.to(self.device)
-    self.train_loader,self.val_loader=get_dataset(-1)
+    self.train_loader,self.val_loader=get_dataset(True)
 
     self.decreasing_lr = list(map(int, conf['decreasing_lr'].split(',')))
     self.optimizer = torch.optim.SGD(self.model.parameters(), float(conf['lr']), momentum=conf['momentum'],
@@ -58,7 +56,7 @@ class Global_model(object):
     avg_acc=sum(client_acc)/len(client_acc)
     self.acc.append(avg_acc)
     self.loss.append(avg_loss)
-    print(f'avg_loss:{avg_loss},acc:{avg_acc}')
+    print(f'avg_loss:{avg_loss:.4f},acc:{avg_acc:.4f}')
     
 
   # 每一轮FL非结构剪枝,输入剪枝率@mk,由于中途需要remove_prune,此剪枝率应递增
@@ -240,41 +238,44 @@ if __name__=='__main__':
 
   # Refill + Torch_pruning prune
   rewind_weight = global_model.model.state_dict()
-  # train code here
-  if True:
-    for unstruct_prune_time in range(3):
-      print(f'Unstruct Prune[{unstruct_prune_time}], Prune Ratio: {global_model.ratio}')
-      # 非结构化剪枝（可迭代）
-      global_model.u_prune(global_model.ratio)
-      weight_with_mask = global_model.model.state_dict()
-      # remove_prune(global_model.model, conv1=False)
-      # 如果达到目标剪枝率，跳出循环
-      if global_model.ratio == target_ratio:
-        print('Reach Target Ratio')
-        break
-      global_model.increase_ratio(target_ratio)
+  for i in range(3):
+    # train code here
+    if True:
+      for unstruct_prune_time in range(2):
+        print(f'Unstruct Prune[{unstruct_prune_time}], Prune Ratio: {global_model.ratio}')
+        # 非结构化剪枝（可迭代）
+        global_model.u_prune(global_model.ratio)
+        weight_with_mask = global_model.model.state_dict()
+        # remove_prune(global_model.model, conv1=False)
+        # 如果达到目标剪枝率，跳出循环
+        if global_model.ratio == target_ratio:
+          print('Reach Target Ratio')
+          break
+        global_model.increase_ratio(target_ratio)
+      remove_prune(global_model.model, conv1=False)
+      print(f'Refill Struct Prune')
+      #mask_weight = global_model.regroup(weight_with_mask)
+      prune_mask = global_model.refill(weight_with_mask, mask_only=True)
+      #remove_prune(global_model.model, conv1=False)
+      check_sparsity(global_model.model, conv1=False)
+
+    # Recover weight
+    global_model.model.load_state_dict(rewind_weight)
+
+    # Apply Sparity to model
+    prune_model_custom(global_model.model,prune_mask, conv1=False)
     remove_prune(global_model.model, conv1=False)
-    print(f'Refill Struct Prune')
-    #mask_weight = global_model.regroup(weight_with_mask)
-    prune_mask = global_model.refill(weight_with_mask, mask_only=True)
-    #remove_prune(global_model.model, conv1=False)
-    check_sparsity(global_model.model, conv1=False)
 
-  # Recover weight
-  global_model.model.load_state_dict(rewind_weight)
+    # TP Permenant Prune
+    global_model.model.zero_grad()  # We don't want to store gradient information
+    trace_input , _ = next(iter(global_model.train_loader))
+    #bits = global_model.get_bits()
+    print('Final sparsity:'+str(100 *
+                                global_model.tp_prune(trace_input.to(global_model.device),
+                                                      i/10, imp_strategy='Magnitude',
+                                                      degree=1)
+                                )+'%')
+    rewind_weight = global_model.model.state_dict()
 
-  # Apply Sparity to model
-  prune_model_custom(global_model.model,prune_mask, conv1=False)
-  remove_prune(global_model.model, conv1=False)
-
-  # TP Permenant Prune
-  global_model.model.zero_grad()  # We don't want to store gradient information
-  trace_input , _ = next(iter(global_model.train_loader))
-  #bits = global_model.get_bits()
-  print('Final sparsity:'+str(100 *
-                              global_model.tp_prune(trace_input.to(global_model.device),
-                                                    0.3, imp_strategy='Magnitude',
-                                                    degree=1)
-                              )+'%')
-  global_model.train()
+	
   

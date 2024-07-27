@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.utils.prune as prune
-import os
-import uuid
+from conf import conf
 
 
 def pruning_model(model, px, conv1=False):
@@ -246,7 +245,7 @@ def prune_snip(model, train_loader, loss, rate):
     masks = {}
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
-        data, target = data.cuda(), target.cuda()
+        data, target = data.to(conf['global_dev']), target.to(conf['global_dev'])
         output = model(data)
         loss(output, target).backward()
 
@@ -263,7 +262,7 @@ def prune_snip(model, train_loader, loss, rate):
     threshold = torch.kthvalue(all_scores, int(len(all_scores) * rate))[0]
 
     for name in list(scores.keys()):
-        mask = torch.where(scores[name] < threshold, torch.tensor(0.0).cuda(), torch.tensor(1.0).cuda())
+        mask = torch.where(scores[name] < threshold, torch.tensor(0.0).to(conf['global_dev']), torch.tensor(1.0).to(conf['global_dev']))
         masks[name + ".weight_mask"] = mask
 
     return masks
@@ -294,7 +293,7 @@ def prune_synflow(model, train_loader, loss, rate):
         signs = linearize(model)
         (data, _) = next(iter(train_loader))
         input_dim = list(data[0, :].shape)
-        input = torch.ones([1] + input_dim).cuda()  # ,dtype=torch.float64).to(device)
+        input = torch.ones([1] + input_dim).to(conf['global_dev'])  # ,dtype=torch.float64).to(device)
         output = model(input)
         torch.sum(output).backward()
 
@@ -310,7 +309,7 @@ def prune_synflow(model, train_loader, loss, rate):
         threshold = torch.kthvalue(all_scores, int(len(all_scores) * ((rate * 100) ** ((epoch + 1) / 100) / 100)))[0]
         norm = torch.sum(all_scores)
         for name in list(scores.keys()):
-            mask = torch.where(scores[name] < threshold, torch.tensor(0.0).cuda(), torch.tensor(1.0).cuda())
+            mask = torch.where(scores[name] < threshold, torch.tensor(0.0).to(conf['global_dev']), torch.tensor(1.0).to(conf['global_dev']))
             masks[name + ".weight_mask"] = mask
         for name, m in model.named_modules():
             if isinstance(m, nn.Conv2d) and name != 'conv1':
@@ -330,7 +329,7 @@ def prune_grasp(model, train_loader, loss, rate):
             masked_parameters.append(m.weight)
 
     for batch_idx, (data, target) in enumerate(train_loader):
-        data, target = data.cuda(), target.cuda()
+        data, target = data.to(conf['global_dev']), target.to(conf['global_dev'])
         output = model(data) / 200
         L = loss(output, target)
         grads = torch.autograd.grad(
@@ -341,7 +340,7 @@ def prune_grasp(model, train_loader, loss, rate):
         stopped_grads += flatten_grads
 
     for batch_idx, (data, target) in enumerate(train_loader):
-        data, target = data.cuda(), target.cuda()
+        data, target = data.to(conf['global_dev']), target.to(conf['global_dev'])
         output = model(data) / 200
         L = loss(output, target)
 
@@ -362,7 +361,7 @@ def prune_grasp(model, train_loader, loss, rate):
     threshold = torch.kthvalue(all_scores, int(len(all_scores) * rate))[0]
     norm = torch.sum(all_scores)
     for name in scores:
-        mask = torch.where(scores[name] < threshold, torch.tensor(0.0).cuda(), torch.tensor(1.0).cuda())
+        mask = torch.where(scores[name] < threshold, torch.tensor(0.0).to(conf['global_dev']), torch.tensor(1.0).to(conf['global_dev']))
         masks[name + ".weight_mask"] = mask
 
     return masks
@@ -379,7 +378,7 @@ def prune_omp(model, train_loader, loss, rate):
     all_scores = torch.cat([torch.flatten(v) for v in scores.values()])
     threshold = torch.kthvalue(all_scores, int(len(all_scores) * rate))[0]
     for name in list(scores.keys()):
-        mask = torch.where(scores[name] < threshold, torch.tensor(0.0).cuda(), torch.tensor(1.0).cuda())
+        mask = torch.where(scores[name] < threshold, torch.tensor(0.0).to(conf['global_dev']), torch.tensor(1.0).to(conf['global_dev']))
         masks[name + ".weight_mask"] = mask
 
     return masks
@@ -396,7 +395,7 @@ def prune_rp(model, train_loader, loss, rate):
     all_scores = torch.cat([torch.flatten(v) for v in scores.values()])
     threshold = torch.kthvalue(all_scores, int(len(all_scores) * rate))[0]
     for name in list(scores.keys()):
-        mask = torch.where(scores[name] < threshold, torch.tensor(0.0).cuda(), torch.tensor(1.0).cuda())
+        mask = torch.where(scores[name] < threshold, torch.tensor(0.0).to(conf['global_dev']), torch.tensor(1.0).to(conf['global_dev']))
         masks[name + ".weight_mask"] = mask
 
     return masks
@@ -579,8 +578,8 @@ def admm_loss(model, Z, U, output, target, rho=1e-2):
     loss = F.nll_loss(output, target)
     for name, param in model.named_parameters():
         if name.split('.')[-1] == "weight":
-            u = U[idx].cuda()
-            z = Z[idx].cuda()
+            u = U[idx].to(conf['global_dev'])
+            z = Z[idx].to(conf['global_dev'])
             loss += rho / 2 * (param - z + u).norm()
             idx += 1
     return loss
@@ -592,7 +591,7 @@ def prune_admm(model, train_loader, loss, rate, optimizer):
         model.train()
         # print('Epoch: {}'.format(epoch + 1))
         for batch_idx, (data, target) in enumerate(train_loader):
-            data, target = data.cuda(), target.cuda()
+            data, target = data.to(conf['global_dev']), target.to(conf['global_dev'])
             optimizer.zero_grad()
             output = model(data)
             loss = admm_loss(model, Z, U, output, target)
@@ -613,7 +612,7 @@ def prune_admm(model, train_loader, loss, rate, optimizer):
     all_scores = torch.cat([torch.flatten(v) for v in scores.values()])
     threshold = torch.kthvalue(all_scores, int(len(all_scores) * rate))[0]
     for name in list(scores.keys()):
-        mask = torch.where(scores[name] < threshold, torch.tensor(0.0).cuda(), torch.tensor(1.0).cuda())
+        mask = torch.where(scores[name] < threshold, torch.tensor(0.0).to(conf['global_dev']), torch.tensor(1.0).to(conf['global_dev']))
         masks[name + ".weight_mask"] = mask
 
     return masks

@@ -8,7 +8,8 @@ from torchvision import datasets
 from torch.utils.data import DataLoader, Subset, Dataset
 from conf import conf
 
-def get_dataset():
+# 获取数据集，如果是服务器直接返回loader
+def get_dataset(ifserver):
     dir=conf['dataset_dir']
     name=conf['dataset_name']
         # download=true表示从下载数据集并把数据集放在root路径中
@@ -47,19 +48,19 @@ def get_dataset():
         eval_dataset = datasets.CIFAR10(dir, train=False, transform=transform_test)
     else:
         print('Wrong dataset name')
-    return train_dataset,eval_dataset
 
-# 根据客户端id获取样本的idx
-def get_dataidx(id):
-    dir=conf['dataset_dir']
-    name=conf['dataset_name']
-
-    #id -1是服务器 直接返回测试集用来测试全局模型的精度
-    if id==-1:
+    #如果是服务器 直接返回测试集用来测试全局模型的精度
+    if ifserver:
         train_loader=torch.utils.data.DataLoader(train_dataset, batch_size=conf["batch_size"])
         eval_loader=torch.utils.data.DataLoader(eval_dataset, batch_size=conf["batch_size"])
         return train_loader,eval_loader
+    else:
+        return train_dataset,eval_dataset
 
+#返回所有客户端的训练/测试样本列表和数据分布    
+def get_data_indices(train_dataset,eval_dataset):
+    train_indices_list=[]
+    eval_indices_list=[]
     if conf['iid']==True:
         # 按客户端id划分数据集 随机抽取样本（iid）
         train_range = list(range(len(train_dataset)))
@@ -68,45 +69,39 @@ def get_dataidx(id):
         train_data_len = int(len(train_dataset) / conf['num_client'])
         eval_data_len = int(len(eval_dataset) / conf['num_client'])
         # 根据客户端的id来平均划分训练集和测试集，indices为该id下的子训练集
-        train_indices = train_range[id * train_data_len: (id + 1) * train_data_len]
-        eval_indices = eval_range[id * eval_data_len: (id + 1) * eval_data_len]
+        for id in range(conf['num_client']):
+            train_indices_list.append(train_range[id * train_data_len: (id + 1) * train_data_len])
+            eval_indices_list.append(eval_range[id * eval_data_len: (id + 1) * eval_data_len]) 
 
         
     else:
     #    noniid用main中生成好的数据idx生成数据集
         with open('noniid/cifar10_train.pkl','rb') as f:
-            client_train_idx=pickle.load(f)
+            train_indices_list=pickle.load(f)
         with open('noniid/cifar10_test.pkl','rb') as f:
-            client_test_idx=pickle.load(f)
-        train_indices=client_train_idx[id]
-        eval_indices=client_test_idx[id]
+            eval_indices_list=pickle.load(f)
 
-    # 训练数据集的加载器，自动将数据分割成batch
-    # sampler定义从数据集中提取样本的策略
-    # 使用sampler：构造数据集的SubsetRandomSampler采样器，它会对下标进行采样
-    # train_dataset父集合
-    # sampler指定子集合
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=conf["batch_size"], sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices))
-    eval_loader = torch.utils.data.DataLoader(eval_dataset, batch_size=conf["batch_size"], sampler=torch.utils.data.sampler.SubsetRandomSampler(eval_indices)) 
-
-    #统计各类数据数量分布的函数，得到一个长度10的list，
-    train_data_dis = dis_total(train_loader,10)
-    eval_data_dis=dis_total(eval_loader,10)
-
-    return train_loader, eval_loader,train_data_dis,eval_data_dis
+    #统计各类数据数量分布的函数，得到一个list
+    train_data_dis=[]
+    for indices in train_indices_list:
+        subdata = Subset(train_dataset,indices)
+        train_data_dis.append(dis_total(subdata))
+    del subdata
+    return train_indices_list, eval_indices_list,train_data_dis
 
 
 #从dataloader统计数据分布,num_class是数据集总类别数量
-def dis_total(loader,num_class):
+def dis_total(dataset,num_class=conf['num_class']):
+    datasize=len(dataset)
+    loader=DataLoader(dataset,batch_size=128,shuffle=False)
     label_counter=Counter()
     for _, labels in loader:
     # 更新计数器
         label_counter.update(labels.tolist())  # 假设 labels 是一个 torch 张量  
     label_list=[0]*num_class
     for label, count in label_counter.items():
-        label_list[label]=count
+        label_list[label]=count/datasize
     return label_list
-
    
 
 # 以下用于划分noniid数据集
@@ -480,10 +475,10 @@ if __name__=='__main__':
     #   pickle.dump(user_groups_test,f)
     get_dataset(0)
 
-    train_dataset, test_dataset = get_dataset_femnist_noniid(3)
-    train_loader = DataLoader(train_dataset, batch_size=4)
-    for batch in train_loader:
-        x, y = batch
-        print(f'x: {x.shape}, y: {y.shape}')
-        break
+    # train_dataset, test_dataset = get_dataset_femnist_noniid(3)
+    # train_loader = DataLoader(train_dataset, batch_size=4)
+    # for batch in train_loader:
+    #     x, y = batch
+    #     print(f'x: {x.shape}, y: {y.shape}')
+    #     break
 

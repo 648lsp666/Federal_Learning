@@ -4,22 +4,24 @@ from conf import conf
 from local_model import Local_model
 import pickle
 from gzip import compress,decompress
-from dataset import get_dataset
+from dataset import get_dataset,get_data_indices
 
 # @zhy
 # fedlth项目的客户端模块
 
 # 接收数据函数     # sock:发送方socket
 def recv_data(sock ,expect_msg_type=None):
-	msg_len = struct.unpack(">I", sock.recv(4))[0]
-	msg = sock.recv(msg_len, socket.MSG_WAITALL)
-	msg = pickle.loads(decompress(msg))
-	if (expect_msg_type is not None) and (msg[0] != expect_msg_type):
-		#print(msg)
-		raise Exception("Expected " + expect_msg_type + " but received " + msg[0])
-	# 表示成功接收
-	sock.sendall(struct.pack('>I', 200))
-	return msg
+  msg_len = struct.unpack(">I", sock.recv(4))[0]
+  try: 
+    msg = sock.recv(msg_len, socket.MSG_WAITALL)
+    msg = pickle.loads(decompress(msg))
+    sock.sendall(struct.pack('>I', 200))
+    return msg
+  except Exception as e:
+    print("An error occurred:", e)
+    # 返回错误代码
+    sock.sendall(struct.pack('>I', 400))
+
 
 # 发送数据函数     # sock:接收方socket
 def send_data(sock, data):
@@ -37,44 +39,49 @@ def send_data(sock, data):
 
 class Fed_client:
   def __init__(self):
-      #建立连接
-  # 服务端为TCP方式，客户端也采用TCP方式，默认参数即为TCP
+    #建立连接
+    # 服务端为TCP方式，客户端也采用TCP方式，默认参数即为TCP
     self.sock= socket.socket()
     # 连接主机
     self.sock.connect((conf['ip'],conf['port']))
     #接收服务器分配的客户端id,id从0开始编号
     self.id=recv_data(self.sock)
-    model=recv_data(self.sock)
-    #初始化本地模型
-    self.local_model=Local_model(self.id,model)
+    self.acc_list=[]
+    self.loss_list=[]
+    self.train_time_list=[]
+    self.comm_datasize_list=[]
     print(f'Client id:{self.id}. Waiting...')
 
 
 
 if __name__ == "__main__":
-  dataset = get_dataset()
-  #该脚本单线程模拟10个客户端
-  # a=Fed_client()
+  train_data, test_data = get_dataset(False)
   client_list=[]
-  for i in range(10):
+  # 单个脚本模拟多客户端
+  for i in range(conf['v_client']):
     client_list.append(Fed_client())
-  # 记录通信数据量
-  comm_datasize=[]
-  total_time=[]
-  # 初始化本地模型和
-
+  # 分配数据集
+  train_indices, eval_indices,train_dis=get_data_indices(train_data,test_data)
+  for client in client_list:
+    client.train_indices, client.eval_indices,client.train_dis =train_indices[client.id], eval_indices[client.id],train_dis[client.id]
   print('Init done')
   for client in client_list:
     # 等等待服务器下一步命令
     op=recv_data(client.sock)
     #开始客户端分组
     if op=='group':
+      # 接收初始模型
+      model=recv_data(client.sock)
+      # 创建本地模型对象
+      local_model=Local_model(model)
       #第一步 测量本地训练时间
-      train_time=client.local_model.time_test()
+      epoch_time=local_model.time_test()
+      train_len=len(client.train_indices)
+      train_time = train_len/conf['batch_size']*epoch_time*conf['local_epoch']
       #第二步 上传本地信息:客户端id 训练集大小、数据分布、训练时间
       client_info={'id':client.id,
-        'data_dis':client.local_model.train_dis,
-        'train_data_len':client.local_model.train_len, 
+        'data_dis':client.train_dis,
+        'train_data_len':train_len, 
         'train_time':train_time, 
         'prune_ratio':0,
         'channel_sparsity':0 }
@@ -87,57 +94,66 @@ if __name__ == "__main__":
     #第三步 接收服务器下发的时间阈值，本地随机剪枝测时间
     train_time_T=recv_data(client.sock)
     # 在prune_ratio函数中测出客户端在该时间阈值下的剪枝率
-    prune_ratio,channel_sparsity=client.local_model.prune_ratio(train_time_T)
+    prune_ratio,channel_sparsity=local_model.prune_ratio(train_time_T)
     # 上传该剪枝率
     send_data(client.sock,[client.id,prune_ratio,channel_sparsity])
-    print('group finish')
+  print('group finish')
 
   # 训练阶段，等待服务器下一步命令
-  for global_epoch in range(conf['global_epoch']):
-    print(f'global epoch {global_epoch}')
+  global_epoch = 0
+  while global_epoch < conf['global_epoch']:
     for client in client_list: 
       op=recv_data(client.sock)
       if op=='train':
-        print(f'client {client.id} local train')
+        global_epoch=recv_data(client.sock)
+        print(f'global epoch {global_epoch},client {client.id} local train')
         #本地训练
-        #直接用全局模型覆盖本地模型
-        client.local_model.model=recv_data(client.sock)
+        #接收全局模型参数
+        model_para=recv_data(client.sock)
+        comm_size=len(compress(pickle.dumps(model_para)))
+        client.comm_datasize_list.append(comm_size)
         #本地训练
-        train_time,loss,acc=client.local_model.local_train(client.local_model.train_data,conf['local_epoch'])
-        total_time.append(train_time)
+        local_model.model.load_state_dict(model_para)
+        train_time,weight=local_model.train(train_data,client.train_indices)
+        loss,acc=local_model.eval(test_data,client.eval_indices)
+        client.train_time_list.append(train_time)
+        client.loss_list.append(loss)
+        client.acc_list.append(acc)
         # 上传状态字典、loss 和 test acc
-        send_data(client.sock,[client.local_model.model.state_dict(),loss, acc]) 
+        send_data(client.sock,[weight,loss, acc]) 
+        comm_size=len(compress(pickle.dumps(weight)))
+        client.comm_datasize_list.append(comm_size)
       elif op=='wait':
+        global_epoch=recv_data(client.sock)
         print(f'client {client.id} wait')
-      elif op=='eval':
-        break
+      # 全局模型剪枝后 需要重新分发模型结构
+      elif op=='model':
+        model=recv_data(client.sock)
+        local_model=Local_model(model)
       else :
-        raise Exception('ERROR!')
+        raise Exception('OP ERROR!')
     if op=='eval':
+      print('fed train finish,start eval')
       break
-
+    if op=='wait' or op == 'train':
+      global_epoch+=1
+    
+  
   for client in client_list:
     op=recv_data(client.sock)
     if op=='eval':
-      print('fed finish,start eval' )
-      client.local_model.model=recv_data(client.sock)
-      final_acc=client.local_model.eval()
-      # print(f'client{client.id} final Acc:{final_acc}')
+      model=recv_data(client.sock)
+      local_model=Local_model(model)
+      loss,acc=local_model.eval(test_data,client.eval_indices)
+      print(f'client{client.id} final Acc:{acc}')
       # 上传测试数据
       eval_info={'id':client.id,
-                'total_time':total_time,
-                'comm_size':comm_datasize,
-                'loss_curve':client.local_model.loss,
-                'acc_curve':client.local_model.acc,
-                'final_acc':final_acc}
+                'train_time_list':client.train_time_list,
+                'comm_size_list':client.comm_datasize_list,
+                'loss_curve':client.loss_list,
+                'acc_curve':client.acc_list,
+                'final_acc':acc,
+                'final_loss':loss}
       send_data(client.sock,eval_info)
-  # for client in client_list:
-  #   op=recv_data(client.sock)
-  #   print(op)
+
   print('FL done')
-
-
-
-    
-    
-

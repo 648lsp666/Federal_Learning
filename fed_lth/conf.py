@@ -8,10 +8,13 @@ conf={
     "port":5000,
 
     #总客户端数量
-    "num_client" :10,
+    "num_client" :3,
+    # 一个client脚本中模拟出的客户端数量
+    "v_client":3,
+
     #全局迭代次数：即服务端和客户端的通信次数
     #通常会设置一个最大的全局迭代次数，但在训练过程中，只要模型满足收敛的条件，那么训练也可以提前终止
-	"global_epoch" : 1000,
+	"global_epoch" : 100,
 	
     #本地模型的迭代次数：即每一个客户端在进行本地模型训练时的迭代次数
 	"local_epoch" : 1,
@@ -70,7 +73,7 @@ conf={
     "start_ratio" : 0.1,
 
     #Global_model设备
-    "global_dev" : 'cuda',
+    "global_dev" : 'cpu',
     'local_dev':'cuda',
 
 

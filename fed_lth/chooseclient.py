@@ -1,6 +1,6 @@
 import numpy as np
 import random
-
+from conf import conf
 # client_info随机生成，测试用
 def generate_client_info(num_clients, B, max_data_len, max_train_time, max_prune_ratio):
     client_info = {}
@@ -108,7 +108,9 @@ def multi_group_simulated_annealing(client_info, num_iterations, cooling_rate, i
 
 def client_group(client_info):
     num_clients = len(client_info)
-    group_size = int(num_clients * 0.2)
+    group_size = int(num_clients * conf['k'])
+    if group_size<=1:
+        return [[id for id in client_info]]
     B = 4    
     initial_pM = 0.3
     delta_pM = 0.1

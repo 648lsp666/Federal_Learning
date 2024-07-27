@@ -31,7 +31,7 @@ def send_data(sock, data):
 		raise Exception(f"send data error,socket: {sock}")
 
 # 接收数据函数     # sock:发送方socket
-def recv_data(sock ,expect_msg_type=None):
+def recv_data(sock):
 	msg_len = struct.unpack(">I", sock.recv(4))[0]
 	msg = sock.recv(msg_len, socket.MSG_WAITALL)
 	msg = pickle.loads(decompress(msg))
@@ -55,10 +55,9 @@ def conn():
 		print('Got connection from ', (ip, port))
 		print(client_sock)
 		client_sock_all.append(client_sock)
-		# 下发id和初始模型 , id 从0开始
+		# 下发id， 从0开始
 		id= len(client_sock_all)-1
 		send_data(client_sock,id)
-		send_data(client_sock,global_model.model)
 	return listening_sock,client_sock_all
 
 # 联邦训练函数
@@ -66,6 +65,7 @@ def fed_train(part_id,global_model):
 	if global_model.global_epoch>=conf['global_epoch']:
 		# 如果global_epoch达到直接返回
 		return
+	print(f'global epoch {global_model.global_epoch}' )
 	#获取客户端id对应的socket对象，需要训练的发送train命令，不参与的发送wait
 	client_update=[]
 	client_acc=[]
@@ -74,12 +74,14 @@ def fed_train(part_id,global_model):
 
 	for id in range(len(clients)):
 		sock=clients[id]
+		# 下发全局轮数
 		if id in part_id:
 			# 该客户端参与训练
 			# 下发训练命令
 			send_data(sock,'train')
+			send_data(sock,global_model.global_epoch)
 			# 下发全局模型
-			send_data(sock,global_model.model)
+			send_data(sock,global_model.model.state_dict())
 			# 接收更新信息
 			data=recv_data(sock)			
 			client_update.append(copy.deepcopy(data[0]))
@@ -88,9 +90,9 @@ def fed_train(part_id,global_model):
 		else:
 			# 该客户端等待
 			send_data(sock,'wait')		
+			send_data(sock,global_model.global_epoch)
 	#接收到全部更新,开始聚合
 	global_model.aggregate(client_update,client_loss,client_acc)
-	print(f'global epoch {global_model.global_epoch}' )
 	# torch.save(global_model,os.path.join(conf['temp_path'],f'global{global_model.global_epoch}_model'))
 
 if __name__=='__main__':
@@ -119,8 +121,9 @@ if __name__=='__main__':
 	print('all client connected')
 	# 分组过程
 	for client in clients:
-		# 发送分组命令
+		# 发送分组命令和初始模型
 		send_data(client,'group')
+		send_data(client,global_model.model)
 		# 接收客户端信息
 		data=recv_data(client)
 		client_info[data['id']]=data
@@ -146,38 +149,40 @@ if __name__=='__main__':
 		print(f'recv client{data[0]},prune_ratio:{data[1]}')
 
 	# # 保存客户端信息
-	# with open('result/client_info10.pkl','wb') as f:
+	# with open('result/client_info100.pkl','wb') as f:
 	# 	pickle.dump(client_info,f)   
-	# 测试用客户端信息
-	with open('result/client_info10.pkl','rb') as f:
+	# 测试代码
+	with open('result/client_info100.pkl','rb') as f:
 		client_info=pickle.load(f)    
 	# 开始模拟退火分组
 		# 接收完客户端信息 开始客户端分组
-	# client_info={
-	# 	0:  {'id': 0, 'data_dis': [0.1024, 0.106, 0.0956, 0.1004, 0.0908, 0.0984, 0.1024, 0.1044, 0.0996, 0.1], 'train_data_len': 2500, 'train_time': 12.279283255338669, 'prune_ratio': 0.6179542324821345, 'channel_sparsity': 0.15}
-	# }
-	print('start group')
+	client_info[1]=  {'id': 1, 'data_dis': [0.1024, 0.106, 0.0956, 0.1004, 0.0908, 0.0984, 0.1024, 0.1044, 0.0996, 0.1], 'train_data_len': 2500, 'train_time': 12.279283255338669, 'prune_ratio': 0.47, 'channel_sparsity': 0.1}
+	client_info[2]=  {'id': 2, 'data_dis': [0.1024, 0.106, 0.0956, 0.1004, 0.0908, 0.0984, 0.1024, 0.1044, 0.0996, 0.1], 'train_data_len': 2500, 'train_time': 12.279283255338669, 'prune_ratio': 0.6179542324821345, 'channel_sparsity': 0.15}
 	groups=client_group(client_info=client_info) 
-	# groups=[[0]]#测试用
+	groups=[[1],[2],[0]]#测试用
 	group_id=0
 	print('group finish')
 
 	#创建早期重置点rewind_weight 应当在训练前被定义
-	while True:
+	while global_model.global_epoch<conf['global_epoch']:
 		fed_train(range(len(clients)), global_model)
-		rewind_weight = global_model.model.state_dict()
 		if global_model.acc[-1]>0.2:
+			rewind_weight = copy.deepcopy(global_model.model.state_dict())
 			break
 
 	# 开始联邦剪枝过程
 	print('start fed prune')
 	while group_id<len(groups) and global_model.global_epoch<conf['global_epoch']:
-		#分组完成
+		# 每次结构剪枝并切换客户端组后下发模型结构
+		for client in clients:
+			send_data(client,'model')
+			send_data(client,global_model.model)
 		# 精度50后开始剪枝
-		while global_model.acc[-1]>conf['start_prune'] and global_model.global_epoch<conf['global_epoch']:
+		while global_model.acc[-1]<conf['start_prune'] and global_model.global_epoch<conf['global_epoch']:
 			fed_train(groups[group_id], global_model)
 		#剪枝间隔轮数
 		prune_step=2
+		u_pruned_flag=False
 		weight_with_mask = global_model.model.state_dict()
 		global_model.init_ratio()
 		target_ratio = max([client_info[id]['prune_ratio'] for id in groups[group_id]])
@@ -230,14 +235,22 @@ if __name__=='__main__':
 															channel_sparsity, imp_strategy='Magnitude',
 															degree=1)
 									  ) + '%')
-		torch.save(global_model.model,f'temp/CNN_group{global_model.global_epoch}_acc{global_model.acc[-1]}.pth')
+		rewind_weight=copy.deepcopy(global_model.model.state_dict())
 		#切换客户端组	
 		group_id+=1
 	print('fed prune finish')
-  # 剪枝结束，微调  
+
+	  # 剪枝结束，微调  
+		# 如果还有剩余轮次可以微调，先下发最终的模型结构
+	if	global_model.global_epoch<conf['global_epoch']:
+		for client in clients:
+			send_data(client,'model')
+			send_data(client,global_model.model)
+	# 全员微调训练
 	while global_model.global_epoch<conf['global_epoch']:
-		group=random.sample(groups , 1)[0]
-		fed_train(group, global_model)
+		fed_train(range(len(clients)), global_model)
+		# group=random.sample(groups , 1)[0]
+		# fed_train(group, global_model)
 
 	# 微调结束，全局模型评估
 	global_model.eval()
@@ -246,10 +259,14 @@ if __name__=='__main__':
 	for sock in clients:
 		# 下发指令
 		send_data(sock,'eval')
+		print('eval')
 		send_data(sock,global_model.model)
   #等待客户端返回统计数据
 		data=recv_data(sock)
 		eval_info.append(data)
+		print(f'recv info from client{data["id"]}')
+
+
 	with open('result/evalinfo.pkl','wb') as f:
 		pickle.dump(eval_info,f)
 	with open('result/client_info.pkl','wb') as f:
@@ -257,7 +274,7 @@ if __name__=='__main__':
 	with open('result/global_acc.pkl','wb') as f:
 		pickle.dump(global_model.acc,f)
 	with open('result/prune_round.pkl','wb') as f:
-		pickle.dump(global_model.acc,f)
+		pickle.dump(prune_round,f)
 
 	print('FL done')
   
