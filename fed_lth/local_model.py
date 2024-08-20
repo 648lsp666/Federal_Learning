@@ -36,6 +36,7 @@ class Local_model(object):
       if self.dynamic_count == self.decrease_frequency:
         self.dynamic_lr *= 1-self.decrease_rate
       lr = self.dynamic_lr
+    print('Train Learning Rate:',lr)
     device=self.device 
     # 训练
     self.model.to(device)
