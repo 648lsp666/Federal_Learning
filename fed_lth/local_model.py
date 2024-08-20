@@ -17,7 +17,6 @@ import torch.optim as optim
 import copy
 import numpy as np
 import os
-from functools import wraps
 
 # 管理本地训练行为
 class Local_model(object):
@@ -27,26 +26,15 @@ class Local_model(object):
     self.noise_scale = self.calculate_noise_scale()
     self.criterion = nn.CrossEntropyLoss().to(self.device)
     self.dynamic_lr = conf['lr']
+    self.dynamic_count = 0
     self.decrease_rate = conf['decrease_rate']
     self.decrease_frequency = conf['decrease_frequency']
 
-  def deco(func):
-    function_call_count = {}
-    @wraps(func)
-    def wrap(self, *args, **kwargs):
-      # 获取函数名称
-      func_name = func.__name__
-      # 更新执行次数
-      function_call_count[func_name] = function_call_count.get(func_name, 0) + 1
-      if function_call_count[func_name] % self.decrease_frequency:
-        self.dynamic_lr *= self.decrease_rate
-        print(f'Function {func_name} causes a decrease, dynamic_lr: {self.dynamic_lr}, function called count: {function_call_count[func_name]}')
-      return func(self, *args, **kwargs)
-    return wrap
-
-  @deco
   def train(self,train_data,train_indices,epoch=conf['local_epoch'],lr=None,min_lr=conf['min_lr']):
     if lr is None:
+      self.dynamic_count += 1
+      if self.dynamic_count == self.decrease_frequency:
+        self.dynamic_lr *= 1-self.decrease_rate
       lr = self.dynamic_lr
     device=self.device 
     # 训练
