@@ -86,7 +86,7 @@ def conn():
 	return listening_sock,client_sock_all
 
 # 联邦训练函数
-def fed_train(part_id,global_model):
+def fed_train(part_id,global_model,decrease_lr=False):
 	#获取客户端id对应的socket对象，需要训练的发送train命令，不参与的发送wait
 	participants=[]
 	wait_client=[]

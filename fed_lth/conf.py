@@ -60,6 +60,9 @@ conf={
 	
     #本地模型进行训练时的参数-学习率
 	"lr" : 0.01,
+    "min_lr": 0.001,
+    "decrease_rate": 0.1,
+    "decrease_frequency": 10,    # epoch
     "decreasing_lr" : "80,120",
     #本地模型进行训练时的参数-momentum
 	"momentum" : 0.0001,
