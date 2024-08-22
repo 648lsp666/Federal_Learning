@@ -71,7 +71,7 @@ def fed_train(part_id,global_model):
 	client_acc=[]
 	client_loss=[]
 
-
+	comm_size=0
 	for id in range(len(clients)):
 		sock=clients[id]
 		# 下发全局轮数
@@ -87,12 +87,14 @@ def fed_train(part_id,global_model):
 			client_update.append(copy.deepcopy(data[0]))
 			client_loss.append(data[1])
 			client_acc.append(data[2])
+			comm_size+=compress(pickle.dumps(global_model.model.state_dict()))
 		else:
 			# 该客户端等待
 			send_data(sock,'wait')		
 			send_data(sock,global_model.global_epoch)
 	#接收到全部更新,开始聚合
 	global_model.aggregate(client_update,client_loss,client_acc)
+	comm_datasize_list.append(comm_size)
 	# torch.save(global_model,os.path.join(conf['temp_path'],f'global{global_model.global_epoch}_model'))
 
 if __name__=='__main__':
@@ -112,6 +114,8 @@ if __name__=='__main__':
 	groups=[]
 	#记录发生剪枝的轮数
 	prune_round=[]
+	# 记录通信流量
+	comm_datasize_list=[]
     
 
 
@@ -152,14 +156,14 @@ if __name__=='__main__':
 	# with open('result/client_info100.pkl','wb') as f:
 	# 	pickle.dump(client_info,f)   
 	# 测试代码
-	with open('result/client_info100.pkl','rb') as f:
-		client_info=pickle.load(f)    
-	# 开始模拟退火分组
-		# 接收完客户端信息 开始客户端分组
-	client_info[1]=  {'id': 1, 'data_dis': [0.1024, 0.106, 0.0956, 0.1004, 0.0908, 0.0984, 0.1024, 0.1044, 0.0996, 0.1], 'train_data_len': 2500, 'train_time': 12.279283255338669, 'prune_ratio': 0.47, 'channel_sparsity': 0.1}
-	client_info[2]=  {'id': 2, 'data_dis': [0.1024, 0.106, 0.0956, 0.1004, 0.0908, 0.0984, 0.1024, 0.1044, 0.0996, 0.1], 'train_data_len': 2500, 'train_time': 12.279283255338669, 'prune_ratio': 0.6179542324821345, 'channel_sparsity': 0.15}
+	# with open('result/client_info100.pkl','rb') as f:
+	# 	client_info=pickle.load(f)    
+	# # 开始模拟退火分组
+	# 	# 接收完客户端信息 开始客户端分组
+	# client_info[1]=  {'id': 1, 'data_dis': [0.1024, 0.106, 0.0956, 0.1004, 0.0908, 0.0984, 0.1024, 0.1044, 0.0996, 0.1], 'train_data_len': 2500, 'train_time': 12.279283255338669, 'prune_ratio': 0.47, 'channel_sparsity': 0.1}
+	# client_info[2]=  {'id': 2, 'data_dis': [0.1024, 0.106, 0.0956, 0.1004, 0.0908, 0.0984, 0.1024, 0.1044, 0.0996, 0.1], 'train_data_len': 2500, 'train_time': 12.279283255338669, 'prune_ratio': 0.6179542324821345, 'channel_sparsity': 0.15}
 	groups=client_group(client_info=client_info) 
-	groups=[[1],[2],[0]]#测试用
+	# groups=[[1],[2],[0]]#测试用
 	group_id=0
 	print('group finish')
 
