@@ -6,6 +6,7 @@
 import torch
 from dataset import get_dataset,get_data_indices
 from torch.utils.data import Dataset, DataLoader, TensorDataset,Subset
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from conf import conf
 import time
 import torchvision
@@ -17,7 +18,6 @@ import copy
 import numpy as np
 import os
 
-
 # 管理本地训练行为
 class Local_model(object):
   def __init__(self, model):
@@ -25,19 +25,31 @@ class Local_model(object):
     self.model=copy.deepcopy(model)
     self.noise_scale = self.calculate_noise_scale()
     self.criterion = nn.CrossEntropyLoss().to(self.device)
-  
-  def train(self,train_data,train_indices,epoch=conf['local_epoch'],lr=conf['lr']):
-    device=self.device
+    self.dynamic_lr = conf['lr']
+    self.dynamic_count = 0
+    self.decrease_rate = conf['decrease_rate']
+    self.decrease_frequency = conf['decrease_frequency']
+
+  def train(self,train_data,train_indices,epoch=conf['local_epoch'],lr=None,min_lr=conf['min_lr']):
+    if lr is None:
+      self.dynamic_count += 1
+      if self.dynamic_count == self.decrease_frequency:
+        self.dynamic_lr *= 1-self.decrease_rate
+      lr = self.dynamic_lr
+    print('Train Learning Rate:',lr)
+    device=self.device 
     # 训练
     self.model.to(device)
     self.model.train()
     # 创建损失函数和优化器
     optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=0.9)
+    scheduler = ReduceLROnPlateau(optimizer, 'min', patience=2, min_lr=min_lr, verbose=True)
     train_set=Subset(train_data,train_indices)
     train_loader=DataLoader(train_set,batch_size=conf['batch_size'])
     # 计算时间
     start_time = time.time()
     for e in range(epoch):
+      epoch_loss = 0.0
       for inputs, labels in train_loader:
         inputs = inputs.to(device)
         labels = labels.to(device)
@@ -45,6 +57,7 @@ class Local_model(object):
         outputs = self.model(inputs)
         loss = self.criterion(outputs, labels)
         loss.backward()
+        epoch_loss += loss.item()
         # 梯度裁剪
         if conf['dp_mechanism'] != 'NO':
           self.clip_gradients(self.model)
@@ -52,6 +65,7 @@ class Local_model(object):
         # 添加隐私噪声
         if conf['dp_mechanism'] != 'NO':
           self.add_noise(self.model)
+      scheduler.step(epoch_loss)
     end_time = time.time()
     elapsed_time = end_time - start_time
     self.model.to('cpu')
