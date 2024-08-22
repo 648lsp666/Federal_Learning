@@ -109,12 +109,13 @@ if __name__ == "__main__":
         print(f'global epoch {global_epoch},client {client.id} local train')
         #本地训练
         #接收全局模型参数
-        model_para=recv_data(client.sock)
+        data=recv_data(client.sock)
+        model_para,lr=data[0],data[1]
         comm_size=len(compress(pickle.dumps(model_para)))
         client.comm_datasize_list.append(comm_size)
         #本地训练
         local_model.model.load_state_dict(model_para)
-        train_time,weight=local_model.train(train_data,client.train_indices)
+        train_time,weight=local_model.train(train_data,client.train_indices,lr=lr)
         loss,acc=local_model.eval(test_data,client.eval_indices)
         client.train_time_list.append(train_time)
         client.loss_list.append(loss)

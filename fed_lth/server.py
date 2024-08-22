@@ -61,7 +61,7 @@ def conn():
 	return listening_sock,client_sock_all
 
 # 联邦训练函数
-def fed_train(part_id,global_model,decrease_lr=False):
+def fed_train(part_id,global_model,lr=conf['lr']):
 	if global_model.global_epoch>=conf['global_epoch']:
 		# 如果global_epoch达到直接返回
 		return
@@ -81,7 +81,7 @@ def fed_train(part_id,global_model,decrease_lr=False):
 			send_data(sock,'train')
 			send_data(sock,global_model.global_epoch)
 			# 下发全局模型和学习率
-			send_data(sock,global_model.model.state_dict())
+			send_data(sock,[global_model.model.state_dict(),lr])
 			# 接收更新信息
 			data=recv_data(sock)			
 			client_update.append(copy.deepcopy(data[0]))
