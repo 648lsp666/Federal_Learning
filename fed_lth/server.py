@@ -97,6 +97,28 @@ def fed_train(part_id,global_model,lr=conf['lr']):
 	comm_datasize_list.append(comm_size)
 	# torch.save(global_model,os.path.join(conf['temp_path'],f'global{global_model.global_epoch}_model'))
 
+class LR_UPDATE():
+	def __init__(self,init_lr=conf['lr'],
+			  decrease_rate=conf['decrease_rate'],
+			  min_lr=conf['min_lr'],
+			  decrease_frequency:int =conf['decrease_frequency']):
+		self.counter = 0
+		self.init_lr = init_lr
+		self.lr = init_lr
+		self.decrease_rate = decrease_rate
+		self.min_lr = min_lr
+		self.decrease_frequency = decrease_frequency
+	
+	def __call__(self, reset=False):
+		self.counter += 1
+		if reset:
+			self.lr = self.init_lr
+			self.counter = 0
+			return self.lr
+		if self.counter % self.decrease_frequency == 0:
+			self.lr = max(self.min_lr, self.lr * (1.-self.decrease_rate))
+		return self.lr
+
 if __name__=='__main__':
   # 初始化
 	global_model=Global_model()
@@ -167,6 +189,8 @@ if __name__=='__main__':
 	group_id=0
 	print('group finish')
 
+	lr_update = LR_UPDATE()
+
 	#创建早期重置点rewind_weight 应当在训练前被定义
 	while global_model.global_epoch<conf['global_epoch']:
 		fed_train(range(len(clients)), global_model)
@@ -183,7 +207,7 @@ if __name__=='__main__':
 			send_data(client,global_model.model)
 		# 精度50后开始剪枝
 		while global_model.acc[-1]<conf['start_prune'] and global_model.global_epoch<conf['global_epoch']:
-			fed_train(groups[group_id], global_model)
+			fed_train(groups[group_id], global_model,lr=lr_update())
 		#剪枝间隔轮数
 		prune_step=2
 		u_pruned_flag=False
@@ -194,7 +218,7 @@ if __name__=='__main__':
 		#测试用例Target_ratio
 		while global_model.global_epoch< conf['global_epoch']:
 			#训练
-			fed_train(groups[group_id], global_model)
+			fed_train(groups[group_id], global_model,lr=lr_update())
 			#每过prune_step轮触发一次剪枝
 			if global_model.global_epoch % prune_step == 0:
 				if global_model.acc[-1]<conf['start_prune']:
@@ -233,6 +257,8 @@ if __name__=='__main__':
 		# TP Permenant Prune
 		global_model.model.zero_grad()
 		trace_input, _ = next(iter(global_model.train_loader))
+		# Reset Learning rate
+		lr_update(reset=True)
 		######################把这里的0.3替换为通道剪枝率#######################
 		print('Final sparsity:' + str(100 *
 									  global_model.tp_prune(trace_input.to(global_model.device),
@@ -251,8 +277,9 @@ if __name__=='__main__':
 			send_data(client,'model')
 			send_data(client,global_model.model)
 	# 全员微调训练
+	lr_update(reset=True)
 	while global_model.global_epoch<conf['global_epoch']:
-		fed_train(range(len(clients)), global_model)
+		fed_train(range(len(clients)), global_model,lr=lr_update())
 		# group=random.sample(groups , 1)[0]
 		# fed_train(group, global_model)
 
