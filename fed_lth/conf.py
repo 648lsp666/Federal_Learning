@@ -17,7 +17,7 @@ conf={
 	"global_epoch" : 1000,
 	
     #本地模型的迭代次数：即每一个客户端在进行本地模型训练时的迭代次数
-	"local_epoch" : 1,
+	"local_epoch" : 2,
     #本地模型进行训练时的参数-每个batch的大小
 	"batch_size" : 32,
 
@@ -40,7 +40,7 @@ conf={
 
 	
     # 是否iid
-    'iid':True,
+    'iid':False,
 
     #noniid设置： 在分割数据集的dataset.py的main函数中使用
     # 每个客户端类别数量

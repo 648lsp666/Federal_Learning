@@ -61,6 +61,7 @@ def get_dataset(ifserver):
 def get_data_indices(train_dataset,eval_dataset):
     train_indices_list=[]
     eval_indices_list=[]
+    train_data_dis=[]
     if conf['iid']==True:
         # 按客户端id划分数据集 随机抽取样本（iid）
         train_range = list(range(len(train_dataset)))
@@ -78,11 +79,12 @@ def get_data_indices(train_dataset,eval_dataset):
     #    noniid用main中生成好的数据idx生成数据集
         with open('noniid/cifar10_train.pkl','rb') as f:
             train_indices_list=pickle.load(f)
+            train_indices_list=list(train_indices_list.values())
         with open('noniid/cifar10_test.pkl','rb') as f:
             eval_indices_list=pickle.load(f)
-
+            eval_indices_list=list(eval_indices_list.values())
+            
     #统计各类数据数量分布的函数，得到一个list
-    train_data_dis=[]
     for indices in train_indices_list:
         subdata = Subset(train_dataset,indices)
         train_data_dis.append(dis_total(subdata))
@@ -473,12 +475,6 @@ if __name__=='__main__':
     #   pickle.dump(user_groups_train,f)
     # with open('noniid\cifar10_test.pkl','wb') as f:
     #   pickle.dump(user_groups_test,f)
-    get_dataset(0)
-
-    # train_dataset, test_dataset = get_dataset_femnist_noniid(3)
-    # train_loader = DataLoader(train_dataset, batch_size=4)
-    # for batch in train_loader:
-    #     x, y = batch
-    #     print(f'x: {x.shape}, y: {y.shape}')
-    #     break
+    train_data, test_data = get_dataset(False)
+    train_indices, eval_indices,train_dis=get_data_indices(train_data,test_data)
 

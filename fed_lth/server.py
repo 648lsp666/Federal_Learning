@@ -87,7 +87,7 @@ def fed_train(part_id,global_model,lr=conf['lr']):
 			client_update.append(copy.deepcopy(data[0]))
 			client_loss.append(data[1])
 			client_acc.append(data[2])
-			comm_size+=compress(pickle.dumps(global_model.model.state_dict()))
+			comm_size+=len(compress(pickle.dumps(global_model.model.state_dict())))
 		else:
 			# 该客户端等待
 			send_data(sock,'wait')		
